@@ -1,0 +1,27 @@
+// Prisma schema para Supabase (PostgreSQL)
+// Documentação: https://pris.ly/d/supabase
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Entidades base (serão expandidas nas tarefas de cadastro)
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      Role     @default(OWNER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  OWNER
+  DRIVER
+  ADMIN
+}
