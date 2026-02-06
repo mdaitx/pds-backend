@@ -48,6 +48,7 @@ pds-backend/
 ├── src/
 │   ├── main.ts          # Bootstrap da aplicação
 │   ├── app.module.ts
+│   ├── auth/            # Autenticação (JWT, roles, /auth/me, recover-password)
 │   ├── prisma/          # Módulo e serviço Prisma
 │   └── supabase/        # Módulo e serviço Supabase
 ├── .env.example
@@ -63,6 +64,16 @@ pds-backend/
 - **class-validator / class-transformer** – validação e transformação de DTOs
 
 A API usa `ValidationPipe` global (whitelist, forbidNonWhitelisted, transform) e CORS configurável via `CORS_ORIGIN`.
+
+## Autenticação (Supabase Auth)
+
+- **Cadastro e login:** feitos no frontend com Supabase Auth (email/senha). O backend não armazena senha.
+- **GET /auth/me** – retorna o usuário atual (JWT obrigatório). Cria registro em `users` no primeiro acesso.
+- **POST /auth/register-profile** – define o perfil (role: OWNER, DRIVER, ADMIN) após o primeiro login.
+- **POST /auth/recover-password** – envia e-mail de recuperação de senha (body: `{ "email": "..." }`).
+- **Guards:** `JwtAuthGuard` (valida JWT do Supabase) e `RolesGuard` + `@Roles()` para autorização por perfil.
+
+No Supabase Dashboard: ative o provedor **Email** em Authentication > Providers. A tabela `public.users` (perfis) foi criada via migração e ligada ao `auth.users`.
 
 ## Docker
 
