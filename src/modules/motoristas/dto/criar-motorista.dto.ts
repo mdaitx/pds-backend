@@ -8,6 +8,7 @@ import {
   MinLength,
   IsEnum,
   IsEmail,
+  ValidateIf,
 } from 'class-validator';
 import { DriverStatus } from '@prisma/client';
 
@@ -18,9 +19,11 @@ export class CriarMotoristaDto {
   name: string;
 
   @IsString()
+  @IsOptional()
+  @ValidateIf((o) => (o.cpf ?? '').trim().length > 0)
   @MinLength(11, { message: 'CPF deve ter 11 dígitos' })
   @MaxLength(14)
-  cpf: string;
+  cpf?: string;
 
   @IsString()
   @IsOptional()
@@ -85,4 +88,9 @@ export class CriarMotoristaDto {
   @IsOptional()
   @MaxLength(2000)
   photoUrl?: string;
+
+  /** Vincular esta ficha a um usuário motorista já existente na empresa (opcional). */
+  @IsString()
+  @IsOptional()
+  linkedUserId?: string;
 }

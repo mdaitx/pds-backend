@@ -1,16 +1,18 @@
-import { Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { User } from '@prisma/client';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
+import type { AuthUser } from '../../shared/domain/auth-user.interface';
 
-/** Usuário autenticado após validação do JWT: dados que o backend usa para autorização. */
-export interface AuthUser {
-  id: string;
-  email: string;
-  role: Role;
-  supabaseUserId: string;
-}
+/** Re-export para compatibilidade. Preferir importar de shared/domain/auth-user.interface */
+export type { AuthUser } from '../../shared/domain/auth-user.interface';
 
 /**
  * Serviço de autenticação: valida token do Supabase e mantém perfil no banco (User).
@@ -24,6 +26,69 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly supabase: SupabaseService,
   ) {}
+
+  /**
+   * Garante uma linha em `usuarios` para o usuário do Supabase (cria, vincula por e-mail ou recupera após P2002).
+   */
+  private async ensureUserForSupabase(authUser: { id: string; email: string }): Promise<User> {
+    const bySupabase = await this.prisma.user.findUnique({
+      where: { supabaseUserId: authUser.id },
+    });
+    if (bySupabase) return bySupabase;
+
+    const byEmail = await this.prisma.user.findUnique({
+      where: { email: authUser.email },
+    });
+    if (byEmail) {
+      if (byEmail.supabaseUserId != null && byEmail.supabaseUserId !== authUser.id) {
+        throw new UnauthorizedException('Conta já associada a outro login.');
+      }
+      return this.prisma.user.update({
+        where: { id: byEmail.id },
+        data: { supabaseUserId: authUser.id },
+      });
+    }
+
+    try {
+      return await this.prisma.user.create({
+        data: {
+          supabaseUserId: authUser.id,
+          email: authUser.email,
+          role: Role.OWNER,
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        const afterRace = await this.prisma.user.findUnique({
+          where: { supabaseUserId: authUser.id },
+        });
+        if (afterRace) return afterRace;
+
+        const emailRow = await this.prisma.user.findUnique({
+          where: { email: authUser.email },
+        });
+        if (emailRow) {
+          if (emailRow.supabaseUserId != null && emailRow.supabaseUserId !== authUser.id) {
+            throw new UnauthorizedException('Conta já associada a outro login.');
+          }
+          return this.prisma.user.update({
+            where: { id: emailRow.id },
+            data: { supabaseUserId: authUser.id },
+          });
+        }
+      }
+      throw e;
+    }
+  }
+
+  private isDatabaseConnectionError(e: unknown): boolean {
+    if (!(e instanceof Error)) return false;
+    return (
+      e.name === 'PrismaClientInitializationError' ||
+      e.name === 'PrismaClientRustPanicError' ||
+      /P1001|Can't reach database server|Connection refused|ECONNREFUSED|ETIMEDOUT/i.test(e.message)
+    );
+  }
 
   /**
    * Valida o JWT do Supabase e retorna o usuário do nosso banco (criando se não existir).
@@ -47,49 +112,33 @@ export class AuthService {
     }
 
     try {
-      // Sincroniza com nossa tabela usuarios (um registro por usuário Supabase)
-      let user = await this.prisma.user.findUnique({
-        where: { supabaseUserId: authUser.id },
+      const user = await this.ensureUserForSupabase({
+        id: authUser.id,
+        email: authUser.email,
       });
-
-      if (!user) {
-        // Tenta criar; se email já existe (P2002), busca e atualiza supabaseUserId
-        try {
-          user = await this.prisma.user.create({
-            data: {
-              supabaseUserId: authUser.id,
-              email: authUser.email,
-              role: Role.OWNER,
-            },
-          });
-        } catch (e) {
-          if (
-            e instanceof Prisma.PrismaClientKnownRequestError &&
-            e.code === 'P2002' &&
-            Array.isArray(e.meta?.target) &&
-            (e.meta.target as string[]).includes('email')
-          ) {
-            user = await this.prisma.user.update({
-              where: { email: authUser.email },
-              data: { supabaseUserId: authUser.id },
-            });
-          } else {
-            throw e;
-          }
-        }
-      }
 
       return {
         id: user.id,
         email: user.email,
         role: user.role,
         supabaseUserId: user.supabaseUserId!,
+        companyId: user.companyId ?? null,
       };
     } catch (e) {
       if (e instanceof UnauthorizedException) throw e;
+      if (this.isDatabaseConnectionError(e)) {
+        throw new ServiceUnavailableException(
+          'Não foi possível conectar ao banco de dados. Verifique DATABASE_URL e DIRECT_URL no .env do backend.',
+        );
+      }
       if (e instanceof Prisma.PrismaClientKnownRequestError) {
         if (e.code === 'P2025') {
           throw new UnauthorizedException('Usuário não encontrado');
+        }
+        if (e.code === 'P2022') {
+          throw new InternalServerErrorException(
+            'Schema do banco desatualizado (coluna ausente). Aplique as migrations no Supabase ou rode o SQL em prisma/migrations/. Veja P3005 na documentação Prisma se o banco já existia sem histórico de migrations.',
+          );
         }
         if (e.code === 'P2003') {
           throw new InternalServerErrorException(
@@ -125,6 +174,7 @@ export class AuthService {
       email: updated.email,
       role: updated.role,
       supabaseUserId: updated.supabaseUserId!,
+      companyId: updated.companyId ?? null,
     };
   }
 
@@ -134,7 +184,7 @@ export class AuthService {
    */
   async recoverPassword(email: string): Promise<{ message: string }> {
     const { error } = await this.supabase.getAuth().resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/auth/reset-password`,
+      redirectTo: `${(process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '')}/reset-password`,
     });
 
     if (error) {

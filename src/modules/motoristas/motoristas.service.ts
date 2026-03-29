@@ -8,25 +8,43 @@ import {
 import { Role } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { CompanyAccessService } from '../../core/company-access/company-access.service';
 import type { AuthUser } from '../../core/auth/auth.service';
 import { CriarMotoristaDto } from './dto/criar-motorista.dto';
 import { AtualizarMotoristaDto } from './dto/atualizar-motorista.dto';
 
 @Injectable()
 export class MotoristasService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   private async getCompanyId(user: AuthUser): Promise<string> {
-    if (user.role !== Role.OWNER) {
-      throw new ForbiddenException('Apenas donos podem acessar motoristas');
-    }
-    const company = await this.prisma.company.findUnique({
-      where: { ownerId: user.id },
+    return this.companyAccess.resolveCompanyId(user);
+  }
+
+  /** Garante que o usuário é motorista da empresa e ainda não está vinculado a outra ficha. */
+  private async assertLinkedUserForDriver(
+    companyId: string,
+    userId: string,
+    excludeDriverId?: string,
+  ): Promise<void> {
+    const u = await this.prisma.user.findFirst({
+      where: { id: userId, companyId },
     });
-    if (!company) {
-      throw new BadRequestException('Cadastre a empresa antes de cadastrar motoristas');
+    if (!u || u.role !== Role.DRIVER) {
+      throw new BadRequestException('Informe um usuário com perfil motorista desta empresa.');
     }
-    return company.id;
+    const other = await this.prisma.driver.findFirst({
+      where: {
+        userId,
+        ...(excludeDriverId ? { id: { not: excludeDriverId } } : {}),
+      },
+    });
+    if (other) {
+      throw new ConflictException('Este usuário já está vinculado a outro motorista.');
+    }
   }
 
   async findAll(user: AuthUser) {
@@ -63,15 +81,17 @@ export class MotoristasService {
 
   async create(user: AuthUser, dto: CriarMotoristaDto) {
     const companyId = await this.getCompanyId(user);
-    const cpfClean = dto.cpf.replace(/\D/g, '');
-    if (cpfClean.length !== 11) {
-      throw new BadRequestException('CPF deve ter 11 dígitos');
+    const cpfClean = (dto.cpf ?? '').replace(/\D/g, '');
+    if (cpfClean.length > 0 && cpfClean.length !== 11) {
+      throw new BadRequestException('CPF deve ter 11 dígitos quando informado');
     }
-    const existing = await this.prisma.driver.findFirst({
-      where: { companyId, cpf: cpfClean },
-    });
-    if (existing) {
-      throw new ConflictException('Já existe um motorista com este CPF');
+    if (cpfClean.length === 11) {
+      const existing = await this.prisma.driver.findFirst({
+        where: { companyId, cpf: cpfClean },
+      });
+      if (existing) {
+        throw new ConflictException('Já existe um motorista com este CPF');
+      }
     }
 
     if (dto.preferredVehicleId) {
@@ -83,11 +103,15 @@ export class MotoristasService {
       }
     }
 
+    if (dto.linkedUserId) {
+      await this.assertLinkedUserForDriver(companyId, dto.linkedUserId);
+    }
+
     const created = await this.prisma.driver.create({
       data: {
         companyId,
         name: dto.name.trim(),
-        cpf: cpfClean,
+        cpf: cpfClean.length === 11 ? cpfClean : null,
         rg: dto.rg?.trim() || undefined,
         cnh: dto.cnh?.trim() || undefined,
         phone: dto.phone?.trim() || undefined,
@@ -101,6 +125,7 @@ export class MotoristasService {
         status: dto.status ?? 'ACTIVE',
         preferredVehicleId: dto.preferredVehicleId || undefined,
         photoUrl: dto.photoUrl || undefined,
+        userId: dto.linkedUserId || undefined,
       },
     });
     return {
@@ -119,10 +144,10 @@ export class MotoristasService {
       throw new NotFoundException('Motorista não encontrado');
     }
 
-    if (dto.cpf !== undefined) {
+    if (dto.cpf !== undefined && dto.cpf.trim() !== '') {
       const cpfClean = dto.cpf.replace(/\D/g, '');
       if (cpfClean.length !== 11) {
-        throw new BadRequestException('CPF deve ter 11 dígitos');
+        throw new BadRequestException('CPF deve ter 11 dígitos quando informado');
       }
       const existing = await this.prisma.driver.findFirst({
         where: { companyId, cpf: cpfClean, id: { not: id } },
@@ -141,11 +166,19 @@ export class MotoristasService {
       }
     }
 
+    if (dto.linkedUserId !== undefined && dto.linkedUserId !== null) {
+      await this.assertLinkedUserForDriver(companyId, dto.linkedUserId, id);
+    }
+
     const updated = await this.prisma.driver.update({
       where: { id },
       data: {
         ...(dto.name !== undefined && { name: dto.name.trim() }),
-        ...(dto.cpf !== undefined && { cpf: dto.cpf.replace(/\D/g, '') }),
+        ...(dto.cpf !== undefined && {
+          cpf: dto.cpf.trim()
+            ? (dto.cpf.replace(/\D/g, '').length === 11 ? dto.cpf.replace(/\D/g, '') : null)
+            : null,
+        }),
         ...(dto.rg !== undefined && { rg: dto.rg?.trim() || null }),
         ...(dto.cnh !== undefined && { cnh: dto.cnh?.trim() || null }),
         ...(dto.phone !== undefined && { phone: dto.phone?.trim() || null }),
@@ -163,6 +196,9 @@ export class MotoristasService {
           preferredVehicleId: dto.preferredVehicleId === '' ? null : dto.preferredVehicleId,
         }),
         ...(dto.photoUrl !== undefined && { photoUrl: dto.photoUrl || null }),
+        ...(dto.linkedUserId !== undefined && {
+          userId: dto.linkedUserId === null ? null : dto.linkedUserId,
+        }),
       },
     });
     return {

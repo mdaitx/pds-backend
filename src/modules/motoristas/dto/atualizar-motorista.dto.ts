@@ -8,6 +8,7 @@ import {
   MinLength,
   IsEnum,
   IsEmail,
+  ValidateIf,
 } from 'class-validator';
 import { DriverStatus } from '@prisma/client';
 
@@ -20,7 +21,8 @@ export class AtualizarMotoristaDto {
 
   @IsString()
   @IsOptional()
-  @MinLength(11)
+  @ValidateIf((o) => (o.cpf ?? '').trim().length > 0)
+  @MinLength(11, { message: 'CPF deve ter 11 dígitos' })
   @MaxLength(14)
   cpf?: string;
 
@@ -87,4 +89,10 @@ export class AtualizarMotoristaDto {
   @IsOptional()
   @MaxLength(2000)
   photoUrl?: string;
+
+  /** Defina o id do usuário motorista para vincular; envie `null` para desvincular. */
+  @IsOptional()
+  @ValidateIf((o) => o.linkedUserId !== undefined && o.linkedUserId !== null)
+  @IsString()
+  linkedUserId?: string | null;
 }

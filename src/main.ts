@@ -28,8 +28,10 @@ async function bootstrap() {
 
   // CORS: define quais origens podem chamar a API (evita requisições de outros domínios).
   // Em produção, defina CORS_ORIGIN com as URLs do frontend (ex: https://app.pds.com).
+  const corsOrigins = process.env.CORS_ORIGIN?.split(',').map((o) => o.trim()).filter(Boolean) ??
+    ['http://localhost:3000', 'http://localhost:3001'];
   app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000'],
+    origin: corsOrigins,
     credentials: true, // permite envio de cookies/credenciais
   });
 
