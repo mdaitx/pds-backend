@@ -21,13 +21,22 @@ model User {
   id              String   @id @default(cuid())
   supabaseUserId  String?  @unique @map("supabase_user_id")
   email           String   @unique
+  displayName     String?  @map("display_name")
+  photoUrl        String?  @map("photo_url")
+  phone           String?
   role            Role     @default(OWNER)
+  /// Vínculo à frota para ADMIN e co-proprietários (OWNER sem linha em Company.owner_id).
+  companyId       String?  @map("company_id")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   company         Company?  @relation("CompanyOwner")
+  memberOfCompany Company?  @relation("CompanyMembers", fields: [companyId], references: [id], onDelete: SetNull)
   expensesCreated Expense[] @relation("ExpenseCreatedBy")
+  /// Quando role = DRIVER: ficha de motorista vinculada a esta conta (um login ↔ um motorista).
+  driverProfile   Driver?
 
+  @@index([companyId])
   @@map("usuarios")
 }
 
@@ -49,12 +58,13 @@ model Company {
   address          String?
   phone            String?
   email            String?
-  defaultCommission Decimal? @db.Decimal(5, 2) // % comissão padrão
+  defaultCommission Decimal? @map("default_commission") @db.Decimal(5, 2) // % comissão padrão
   ownerId          String   @unique @map("owner_id")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   owner   User     @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members User[]   @relation("CompanyMembers")
   vehicles Vehicle[]
   drivers Driver[]
   trips   Trip[]
@@ -119,7 +129,7 @@ enum VehicleStatus {
 model Driver {
   id                  String        @id @default(cuid())
   name                String
-  cpf                 String
+  cpf                 String?
   rg                  String?
   cnh                 String?
   phone               String?
@@ -134,13 +144,17 @@ model Driver {
   preferredVehicleId  String?       @map("preferred_vehicle_id")
   photoUrl            String?       @map("photo_url") // Supabase Storage
   companyId           String        @map("company_id")
+  /// Conta de login (usuarios) associada a esta ficha; opcional até o convite ou vínculo manual.
+  userId              String?       @unique @map("user_id")
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
 
   company             Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   preferredVehicle   Vehicle?      @relation("DriverPreferredVehicle", fields: [preferredVehicleId], references: [id], onDelete: SetNull)
+  user                User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
   trips              Trip[]
 
+  @@index([companyId])
   @@map("motoristas")
 }
 

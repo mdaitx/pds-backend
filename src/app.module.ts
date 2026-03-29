@@ -1,7 +1,7 @@
 /**
- * Módulo raiz da aplicação NestJS.
+ * MÃ³dulo raiz da aplicaÃ§Ã£o NestJS.
  *
- * Estrutura: common, core (prisma, supabase, auth), modules (domínio).
+ * Estrutura: common, core (prisma, supabase, auth), modules (domÃ­nio).
  */
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
@@ -15,11 +15,19 @@ import { CategoriasDespesasModule } from './modules/categorias-despesas/categori
 import { VeiculosModule } from './modules/veiculos/veiculos.module';
 import { MotoristasModule } from './modules/motoristas/motoristas.module';
 import { ViagensModule } from './modules/viagens/viagens.module';
+import { DespesasModule } from './modules/despesas/despesas.module';
+import { AdiantamentosModule } from './modules/adiantamentos/adiantamentos.module';
+import { AcertosModule } from './modules/acertos/acertos.module';
+import { CompanyAccessModule } from './core/company-access/company-access.module';
+import { CompanyUsersModule } from './modules/company-users/company-users.module';
+import { MailModule } from './core/mail/mail.module';
 
 @Module({
   imports: [
     PrismaModule,
+    MailModule,
     SupabaseModule,
+    CompanyAccessModule,
     AuthModule,
     OnboardingModule,
     EmpresasModule,
@@ -27,8 +35,13 @@ import { ViagensModule } from './modules/viagens/viagens.module';
     VeiculosModule,
     MotoristasModule,
     ViagensModule,
+    DespesasModule,
+    AdiantamentosModule,
+    AcertosModule,
+    CompanyUsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
+

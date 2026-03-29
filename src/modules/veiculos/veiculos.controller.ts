@@ -38,21 +38,21 @@ export class VeiculosController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles(Role.OWNER)
+  @Roles(Role.OWNER, Role.ADMIN)
   async findAll(@CurrentUser() user: AuthUser) {
     return this.veiculosService.findAll(user);
   }
 
   @Get(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.OWNER)
+  @Roles(Role.OWNER, Role.ADMIN)
   async findOne(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.veiculosService.findOne(user, id);
   }
 
   @Post('upload')
   @UseGuards(RolesGuard)
-  @Roles(Role.OWNER)
+  @Roles(Role.OWNER, Role.ADMIN)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_SIZE_BYTES } }))
   async uploadPhoto(
     @CurrentUser() user: AuthUser,
@@ -83,14 +83,14 @@ export class VeiculosController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(Role.OWNER)
+  @Roles(Role.OWNER, Role.ADMIN)
   async create(@CurrentUser() user: AuthUser, @Body() dto: CriarVeiculoDto) {
     return this.veiculosService.create(user, dto);
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.OWNER)
+  @Roles(Role.OWNER, Role.ADMIN)
   async update(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -101,7 +101,7 @@ export class VeiculosController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.OWNER)
+  @Roles(Role.OWNER, Role.ADMIN)
   async remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.veiculosService.remove(user, id);
   }

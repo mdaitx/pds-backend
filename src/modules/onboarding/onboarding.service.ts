@@ -56,6 +56,26 @@ export class OnboardingService {
       },
     });
 
+    if (!company && user.companyId) {
+      const linked = await this.prisma.company.findFirst({
+        where: { id: user.companyId },
+        include: {
+          _count: { select: { vehicles: true, drivers: true } },
+        },
+      });
+      if (linked) {
+        const hasVehicle = (linked._count.vehicles ?? 0) > 0;
+        const hasDriver = (linked._count.drivers ?? 0) > 0;
+        return {
+          completed: true,
+          hasCompany: true,
+          hasVehicle,
+          hasDriver,
+          step: 4,
+        };
+      }
+    }
+
     if (!company) {
       return {
         completed: false,

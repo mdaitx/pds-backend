@@ -29,7 +29,7 @@ export class CategoriasDespesasController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles(Role.OWNER)
+  @Roles(Role.OWNER, Role.ADMIN, Role.DRIVER)
   async findAll(@CurrentUser() user: AuthUser) {
     return this.categoriasDespesasService.findAll(user);
   }

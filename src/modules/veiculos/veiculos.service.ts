@@ -5,27 +5,21 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { CompanyAccessService } from '../../core/company-access/company-access.service';
 import type { AuthUser } from '../../core/auth/auth.service';
 import { CriarVeiculoDto } from './dto/criar-veiculo.dto';
 import { AtualizarVeiculoDto } from './dto/atualizar-veiculo.dto';
 
 @Injectable()
 export class VeiculosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   private async getCompanyId(user: AuthUser): Promise<string> {
-    if (user.role !== Role.OWNER) {
-      throw new ForbiddenException('Apenas donos podem acessar veículos');
-    }
-    const company = await this.prisma.company.findUnique({
-      where: { ownerId: user.id },
-    });
-    if (!company) {
-      throw new BadRequestException('Cadastre a empresa antes de cadastrar veículos');
-    }
-    return company.id;
+    return this.companyAccess.resolveCompanyId(user);
   }
 
   async findAll(user: AuthUser) {

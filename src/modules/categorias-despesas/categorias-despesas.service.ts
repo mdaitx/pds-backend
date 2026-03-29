@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { CompanyAccessService } from '../../core/company-access/company-access.service';
 import type { AuthUser } from '../../core/auth/auth.service';
 import { CriarCategoriaDespesaDto } from './dto/criar-categoria-despesa.dto';
 import { AtualizarCategoriaDespesaDto } from './dto/atualizar-categoria-despesa.dto';
@@ -17,22 +18,34 @@ import { AtualizarCategoriaDespesaDto } from './dto/atualizar-categoria-despesa.
  */
 @Injectable()
 export class CategoriasDespesasService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly companyAccess: CompanyAccessService,
+  ) {}
 
   async findAll(user: AuthUser) {
-    if (user.role !== Role.OWNER) {
-      throw new ForbiddenException('Apenas donos podem listar categorias de despesas');
+    let companyId: string | null = null;
+    if (user.role === Role.OWNER || user.role === Role.ADMIN) {
+      try {
+        companyId = await this.companyAccess.resolveCompanyId(user);
+      } catch {
+        companyId = null;
+      }
+    } else if (user.role === Role.DRIVER) {
+      const driver = await this.prisma.driver.findFirst({
+        where: { email: user.email },
+      });
+      companyId = driver?.companyId ?? null;
+    } else {
+      throw new ForbiddenException('Acesso negado');
     }
-    const company = await this.prisma.company.findUnique({
-      where: { ownerId: user.id },
-    });
     const systemCategories = await this.prisma.expenseCategory.findMany({
       where: { companyId: null },
       orderBy: { name: 'asc' },
     });
-    const customCategories = company
+    const customCategories = companyId
       ? await this.prisma.expenseCategory.findMany({
-          where: { companyId: company.id },
+          where: { companyId },
           orderBy: { name: 'asc' },
         })
       : [];
@@ -56,18 +69,13 @@ export class CategoriasDespesasService {
 
   async create(user: AuthUser, dto: CriarCategoriaDespesaDto) {
     if (user.role !== Role.OWNER) {
-      throw new ForbiddenException('Apenas donos podem criar categorias');
+      throw new ForbiddenException('Apenas proprietários podem criar categorias customizadas');
     }
-    const company = await this.prisma.company.findUnique({
-      where: { ownerId: user.id },
-    });
-    if (!company) {
-      throw new BadRequestException('Cadastre a empresa antes de criar categorias');
-    }
+    const companyId = await this.companyAccess.resolveCompanyId(user);
     const nameNorm = dto.name.trim();
     const existing = await this.prisma.expenseCategory.findUnique({
       where: {
-        companyId_name: { companyId: company.id, name: nameNorm },
+        companyId_name: { companyId, name: nameNorm },
       },
     });
     if (existing) {
@@ -75,7 +83,7 @@ export class CategoriasDespesasService {
     }
     const created = await this.prisma.expenseCategory.create({
       data: {
-        companyId: company.id,
+        companyId,
         name: nameNorm,
         icon: dto.icon ?? 'receipt',
         color: dto.color ?? '#6b7280',
@@ -92,16 +100,11 @@ export class CategoriasDespesasService {
 
   async update(user: AuthUser, id: string, dto: AtualizarCategoriaDespesaDto) {
     if (user.role !== Role.OWNER) {
-      throw new ForbiddenException('Apenas donos podem editar categorias');
+      throw new ForbiddenException('Apenas proprietários podem editar categorias');
     }
-    const company = await this.prisma.company.findUnique({
-      where: { ownerId: user.id },
-    });
-    if (!company) {
-      throw new NotFoundException('Empresa não encontrada');
-    }
+    const companyId = await this.companyAccess.resolveCompanyId(user);
     const category = await this.prisma.expenseCategory.findFirst({
-      where: { id, companyId: company.id },
+      where: { id, companyId },
     });
     if (!category) {
       throw new NotFoundException('Categoria não encontrada ou não pode ser editada');
@@ -110,7 +113,7 @@ export class CategoriasDespesasService {
       const nameNorm = dto.name.trim();
       const existing = await this.prisma.expenseCategory.findFirst({
         where: {
-          companyId: company.id,
+          companyId,
           name: nameNorm,
           id: { not: id },
         },
@@ -138,16 +141,11 @@ export class CategoriasDespesasService {
 
   async remove(user: AuthUser, id: string) {
     if (user.role !== Role.OWNER) {
-      throw new ForbiddenException('Apenas donos podem excluir categorias');
+      throw new ForbiddenException('Apenas proprietários podem excluir categorias');
     }
-    const company = await this.prisma.company.findUnique({
-      where: { ownerId: user.id },
-    });
-    if (!company) {
-      throw new NotFoundException('Empresa não encontrada');
-    }
+    const companyId = await this.companyAccess.resolveCompanyId(user);
     const category = await this.prisma.expenseCategory.findFirst({
-      where: { id, companyId: company.id },
+      where: { id, companyId },
     });
     if (!category) {
       throw new NotFoundException('Categoria não encontrada ou não pode ser excluída');
