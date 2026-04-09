@@ -6,6 +6,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { AcertosService } from './acertos.service';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
@@ -15,6 +16,8 @@ import { CurrentUser } from '../../core/auth/decorators/current-user.decorator';
 import type { AuthUser } from '../../shared/domain/auth-user.interface';
 import { FinalizarViagemDto } from './dto/finalizar-viagem.dto';
 
+@ApiTags('Acertos')
+@ApiBearerAuth('access-token')
 @Controller('settlements')
 @UseGuards(JwtAuthGuard)
 export class AcertosController {

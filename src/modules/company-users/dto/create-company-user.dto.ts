@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
   IsIn,
@@ -14,15 +15,22 @@ import { Role } from '@prisma/client';
  * Sem `password`: envia convite por e-mail (Supabase) para definir senha no primeiro acesso.
  */
 export class CreateCompanyUserDto {
+  @ApiProperty({ example: 'novo@empresa.com', maxLength: 255 })
   @IsEmail()
   @MaxLength(255)
   email!: string;
 
+  @ApiPropertyOptional({ maxLength: 200 })
   @IsOptional()
   @IsString()
   @MaxLength(200)
   name?: string;
 
+  @ApiPropertyOptional({
+    description: 'Senha inicial; se omitido, envia convite por e-mail',
+    minLength: 6,
+    maxLength: 128,
+  })
   @IsOptional()
   @ValidateIf((o) => o.password !== undefined && o.password !== '')
   @IsString()
@@ -30,15 +38,18 @@ export class CreateCompanyUserDto {
   @MaxLength(128)
   password?: string;
 
+  @ApiProperty({ enum: Role })
   @IsIn([Role.ADMIN, Role.OWNER, Role.DRIVER])
   role!: Role;
 
+  @ApiPropertyOptional({ maxLength: 20 })
   @IsOptional()
   @IsString()
   @MaxLength(20)
   phone?: string;
 
   /** Obrigatório quando role é DRIVER e o motorista ainda não existe na frota. */
+  @ApiPropertyOptional({ maxLength: 14, description: 'Obrigatório em alguns fluxos de motorista novo' })
   @IsOptional()
   @IsString()
   @MaxLength(14)
@@ -48,16 +59,19 @@ export class CreateCompanyUserDto {
    * Quando role é DRIVER: vincular o novo login a um motorista já cadastrado (sem `user_id`).
    * Se omitido, usa o motorista com o mesmo e-mail ou cria um novo (comportamento anterior).
    */
+  @ApiPropertyOptional({ maxLength: 40 })
   @IsOptional()
   @IsString()
   @MaxLength(40)
   driverId?: string;
 
+  @ApiPropertyOptional({ maxLength: 20 })
   @IsOptional()
   @IsString()
   @MaxLength(20)
   status?: string;
 
+  @ApiPropertyOptional({ maxLength: 2048 })
   @IsOptional()
   @IsString()
   @MaxLength(2048)

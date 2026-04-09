@@ -14,7 +14,7 @@ import { AtualizarCategoriaDespesaDto } from './dto/atualizar-categoria-despesa.
 
 /**
  * Serviço de categorias de despesas: lista categorias do sistema (companyId null) e
- * customizadas da empresa do dono. Apenas OWNER pode criar/editar/excluir customizadas.
+ * customizadas da empresa. Apenas dono (OWNER) cria/edita/exclui customizadas.
  */
 @Injectable()
 export class CategoriasDespesasService {
@@ -69,7 +69,7 @@ export class CategoriasDespesasService {
 
   async create(user: AuthUser, dto: CriarCategoriaDespesaDto) {
     if (user.role !== Role.OWNER) {
-      throw new ForbiddenException('Apenas proprietários podem criar categorias customizadas');
+      throw new ForbiddenException('Apenas o dono da frota pode criar categorias customizadas');
     }
     const companyId = await this.companyAccess.resolveCompanyId(user);
     const nameNorm = dto.name.trim();
@@ -100,7 +100,7 @@ export class CategoriasDespesasService {
 
   async update(user: AuthUser, id: string, dto: AtualizarCategoriaDespesaDto) {
     if (user.role !== Role.OWNER) {
-      throw new ForbiddenException('Apenas proprietários podem editar categorias');
+      throw new ForbiddenException('Apenas o dono da frota pode editar categorias');
     }
     const companyId = await this.companyAccess.resolveCompanyId(user);
     const category = await this.prisma.expenseCategory.findFirst({
@@ -141,7 +141,7 @@ export class CategoriasDespesasService {
 
   async remove(user: AuthUser, id: string) {
     if (user.role !== Role.OWNER) {
-      throw new ForbiddenException('Apenas proprietários podem excluir categorias');
+      throw new ForbiddenException('Apenas o dono da frota pode excluir categorias');
     }
     const companyId = await this.companyAccess.resolveCompanyId(user);
     const category = await this.prisma.expenseCategory.findFirst({

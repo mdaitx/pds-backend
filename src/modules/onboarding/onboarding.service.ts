@@ -161,6 +161,7 @@ export class OnboardingService {
         brand: dto.brand,
         year: dto.year,
         nickname: dto.nickname ?? undefined,
+        vehicleType: dto.vehicleType ?? 'CAMINHAO',
         companyId: company.id,
       },
     });

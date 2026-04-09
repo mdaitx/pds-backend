@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { OnboardingService, OnboardingStatus } from './onboarding.service';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../core/auth/guards/roles.guard';
@@ -16,6 +17,8 @@ import {
  * Rotas do wizard de onboarding: status e criação de empresa, 1º veículo e 1º motorista.
  * GET /onboarding/status disponível para qualquer autenticado; posts exigem OWNER.
  */
+@ApiTags('Onboarding')
+@ApiBearerAuth('access-token')
 @Controller('onboarding')
 @UseGuards(JwtAuthGuard)
 export class OnboardingController {

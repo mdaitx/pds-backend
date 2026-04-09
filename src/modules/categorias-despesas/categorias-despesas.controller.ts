@@ -8,6 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CategoriasDespesasService } from './categorias-despesas.service';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../core/auth/guards/roles.guard';
@@ -22,6 +23,8 @@ import { AtualizarCategoriaDespesaDto } from './dto/atualizar-categoria-despesa.
  * CRUD de categorias de despesas: listar (sistema + custom), criar, atualizar e excluir customizadas.
  * Rotas mantidas em inglês (/expense-categories) para compatibilidade com o frontend.
  */
+@ApiTags('Categorias de despesas')
+@ApiBearerAuth('access-token')
 @Controller('expense-categories')
 @UseGuards(JwtAuthGuard)
 export class CategoriasDespesasController {
