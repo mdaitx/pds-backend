@@ -29,7 +29,7 @@ function toViagemComRelacoes(trip: {
   loadType: string | null;
   notes: string | null;
   status: TripStatus;
-  vehicle?: { id: string; plate: string; brand: string; model: string };
+  vehicle?: { id: string; plate: string; brand: string; model: string; vehicleType?: string };
   driver?: { id: string; name: string };
 }): ViagemComRelacoes {
   return {
@@ -88,7 +88,7 @@ export class ViagemPrismaRepository implements IViagemRepository {
     const list = await this.prisma.trip.findMany({
       where,
       include: {
-        vehicle: { select: { id: true, plate: true, brand: true, model: true } },
+        vehicle: { select: { id: true, plate: true, brand: true, model: true, vehicleType: true } },
         driver: { select: { id: true, name: true } },
       },
       orderBy: { startDate: 'desc' },
@@ -137,7 +137,7 @@ export class ViagemPrismaRepository implements IViagemRepository {
         status: data.status ?? 'PENDING',
       },
       include: {
-        vehicle: { select: { id: true, plate: true, brand: true, model: true } },
+        vehicle: { select: { id: true, plate: true, brand: true, model: true, vehicleType: true } },
         driver: { select: { id: true, name: true } },
       },
     });
@@ -166,7 +166,7 @@ export class ViagemPrismaRepository implements IViagemRepository {
         ...(data.status !== undefined && { status: data.status }),
       },
       include: {
-        vehicle: { select: { id: true, plate: true, brand: true, model: true } },
+        vehicle: { select: { id: true, plate: true, brand: true, model: true, vehicleType: true } },
         driver: { select: { id: true, name: true } },
       },
     });

@@ -51,7 +51,7 @@ export interface ViagemComRelacoes {
   loadType: string | null;
   notes: string | null;
   status: TripStatus;
-  vehicle?: { id: string; plate: string; brand: string; model: string };
+  vehicle?: { id: string; plate: string; brand: string; model: string; vehicleType?: string };
   driver?: { id: string; name: string };
 }
 

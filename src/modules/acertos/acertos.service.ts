@@ -134,7 +134,7 @@ export class AcertosService {
       include: {
         trip: {
           include: {
-            vehicle: { select: { id: true, plate: true, brand: true, model: true } },
+            vehicle: { select: { id: true, plate: true, brand: true, model: true, vehicleType: true } },
             driver: { select: { id: true, name: true, commissionPct: true } },
             expenses: {
               include: { category: { select: { id: true, name: true, icon: true, color: true } } },
