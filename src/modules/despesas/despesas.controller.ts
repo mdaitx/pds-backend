@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DespesasService } from './despesas.service';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
@@ -25,6 +26,8 @@ const EXPENSE_PREFIX = 'expense-receipts';
 const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
+@ApiTags('Despesas')
+@ApiBearerAuth('access-token')
 @Controller('expenses')
 @UseGuards(JwtAuthGuard)
 export class DespesasController {

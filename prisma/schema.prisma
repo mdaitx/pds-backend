@@ -48,6 +48,14 @@ enum Role {
   @@map("role")
 }
 
+/// Base sobre a qual a % de comissão incide ao finalizar a viagem (quando o motorista usa comissão da empresa).
+enum CommissionCalculationMethod {
+  GROSS_PROFIT // (frete − despesas) — padrão histórico do sistema
+  FREIGHT_VALUE // valor do frete bruto
+
+  @@map("commission_calculation_method")
+}
+
 // -----------------------------------------------------------------------------
 // Empresa: dados cadastrais do dono; uma empresa por usuário OWNER.
 // -----------------------------------------------------------------------------
@@ -59,6 +67,9 @@ model Company {
   phone            String?
   email            String?
   defaultCommission Decimal? @map("default_commission") @db.Decimal(5, 2) // % comissão padrão
+  /// IANA tz database (ex.: America/Sao_Paulo), para exibição e relatórios futuros
+  timezone              String?                       @map("timezone") @db.VarChar(64)
+  commissionMethod      CommissionCalculationMethod   @default(GROSS_PROFIT) @map("commission_method")
   ownerId          String   @unique @map("owner_id")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
@@ -97,23 +108,29 @@ model ExpenseCategory {
 // Veículo: placa única por empresa; status para ativo/inativo/manutenção.
 // -----------------------------------------------------------------------------
 model Vehicle {
-  id         String        @id @default(cuid())
-  plate      String        // placa (validação BR no app)
-  model      String
-  brand      String
-  year       Int
-  nickname   String?
-  status     VehicleStatus @default(ACTIVE)
-  photoUrl   String?       @map("photo_url") // Supabase Storage
-  companyId  String        @map("company_id")
+  id          String        @id @default(cuid())
+  plate       String        // placa (validação BR no app)
+  model       String
+  brand       String
+  year        Int
+  nickname    String?
+  vehicleType VehicleType   @default(CAMINHAO) @map("vehicle_type")
+  status      VehicleStatus @default(ACTIVE)
+  photoUrl    String?       @map("photo_url") // Supabase Storage
+  companyId   String        @map("company_id")
   createdAt  DateTime      @default(now()) @map("created_at")
   updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  trailerVehicleId String?  @map("trailer_vehicle_id")
+  trailerVehicle   Vehicle? @relation("TractorTrailer", fields: [trailerVehicleId], references: [id], onDelete: SetNull)
+  tractorsLinked   Vehicle[] @relation("TractorTrailer")
 
   company    Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   drivers    Driver[]      @relation("DriverPreferredVehicle")
   trips      Trip[]
 
   @@unique([companyId, plate])
+  @@index([trailerVehicleId])
   @@map("veiculos")
 }
 
@@ -121,6 +138,12 @@ enum VehicleStatus {
   ACTIVE
   INACTIVE
   MAINTENANCE
+}
+
+enum VehicleType {
+  CAMINHAO
+  CAVALO_MECANICO
+  SEMI_REBOQUE
 }
 
 // -----------------------------------------------------------------------------

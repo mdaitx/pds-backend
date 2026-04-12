@@ -6,8 +6,9 @@
  */
 import 'dotenv/config';
 
-import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
@@ -35,8 +36,36 @@ async function bootstrap() {
     credentials: true, // permite envio de cookies/credenciais
   });
 
+  const isProd = process.env.NODE_ENV === 'production';
+  const swaggerEnabled = !isProd || process.env.SWAGGER_ENABLED === 'true';
+  if (swaggerEnabled) {
+    const config = new DocumentBuilder()
+      .setTitle('PDS API')
+      .setDescription(
+        'API REST do PDS. Rotas protegidas exigem `Authorization: Bearer <token JWT do Supabase>`.',
+      )
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Access token emitido pelo Supabase',
+        },
+        'access-token',
+      )
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: { persistAuthorization: true },
+    });
+  }
+
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
   console.log(`Backend running at http://localhost:${port}`);
+  if (swaggerEnabled) {
+    console.log(`Swagger UI: http://localhost:${port}/api/docs`);
+  }
 }
 bootstrap();

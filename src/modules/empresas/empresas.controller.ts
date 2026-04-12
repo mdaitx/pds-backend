@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { EmpresasService } from './empresas.service';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../core/auth/guards/roles.guard';
@@ -9,10 +10,11 @@ import { Role } from '@prisma/client';
 import { AtualizarEmpresaDto } from './dto/atualizar-empresa.dto';
 
 /**
- * Rotas de empresa do dono: GET/PUT /companies/me.
- * Todas as rotas exigem JWT e role OWNER (RolesGuard).
+ * Rotas de empresa: GET/PUT /companies/me apenas para dono (OWNER).
  * Rota mantida em inglês (/companies) para compatibilidade com o frontend.
  */
+@ApiTags('Empresas')
+@ApiBearerAuth('access-token')
 @Controller('companies')
 @UseGuards(JwtAuthGuard)
 export class EmpresasController {

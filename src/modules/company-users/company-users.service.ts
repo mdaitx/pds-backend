@@ -10,6 +10,7 @@ import { Role } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { SupabaseService } from '../../core/supabase/supabase.service';
 import { CompanyAccessService } from '../../core/company-access/company-access.service';
+import { MailService } from '../../core/mail/mail.service';
 import type { AuthUser } from '../../shared/domain/auth-user.interface';
 import { CreateCompanyUserDto } from './dto/create-company-user.dto';
 import { UpdateCompanyUserDto } from './dto/update-company-user.dto';
@@ -22,6 +23,7 @@ export class CompanyUsersService {
     private readonly prisma: PrismaService,
     private readonly supabase: SupabaseService,
     private readonly companyAccess: CompanyAccessService,
+    private readonly mail: MailService,
   ) {}
 
   /**
@@ -48,6 +50,44 @@ export class CompanyUsersService {
   private inviteRedirectTo(): string {
     const base = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
     return `${base}/reset-password`;
+  }
+
+  private appOrigin(): string {
+    return (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+  }
+
+  /**
+   * E-mail ao criar conta com senha (motorista, admin ou co-proprietário).
+   * No fluxo só com convite Supabase, o e-mail de convite já é enviado pelo Auth — não duplicamos aqui.
+   */
+  private notifyNewStaffAccountCreated(
+    authEmail: string,
+    dto: CreateCompanyUserDto,
+    useInvite: boolean,
+  ): void {
+    if (useInvite) return;
+    if (
+      dto.role !== Role.DRIVER &&
+      dto.role !== Role.ADMIN &&
+      dto.role !== Role.OWNER
+    ) {
+      return;
+    }
+    const loginUrl = `${this.appOrigin()}/login`;
+    const name = (dto.name?.trim() || authEmail).trim();
+    const roleLabel =
+      dto.role === Role.DRIVER
+        ? 'motorista'
+        : dto.role === Role.ADMIN
+          ? 'administrador'
+          : 'co-proprietário';
+    const subject = `[Truck Finanças] Acesso criado — ${roleLabel}`;
+    const text = `Olá, ${name}.\n\nFoi criada uma conta de ${roleLabel} no Truck Finanças para o endereço ${authEmail}.\n\nInicie sessão em: ${loginUrl}\n\nSe não reconhece este registo, contacte a sua empresa.\n`;
+    void this.mail.sendMail({ to: authEmail, subject, text }).catch((err) => {
+      this.logger.warn(
+        `E-mail de boas-vindas não enviado: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 
   /**
@@ -290,6 +330,8 @@ export class CompanyUsersService {
       if (dto.role === Role.DRIVER) {
         await this.linkDriverToNewStaffUser(companyId, created.id, authEmail, dto);
       }
+
+      this.notifyNewStaffAccountCreated(authEmail, dto, useInvite);
 
       return {
         ...created,

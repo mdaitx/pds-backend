@@ -4,7 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Role, TripStatus } from '@prisma/client';
+import { Role, TripStatus, CommissionCalculationMethod } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CompanyAccessService } from '../../core/company-access/company-access.service';
@@ -92,7 +92,11 @@ export class AcertosService {
         ? Number(company.defaultCommission)
         : 0;
     const grossProfit = freightValue - totalExpenses;
-    const driverCommissionAmt = (grossProfit * commissionPct) / 100;
+    const commissionBase =
+      company.commissionMethod === CommissionCalculationMethod.FREIGHT_VALUE
+        ? freightValue
+        : grossProfit;
+    const driverCommissionAmt = (commissionBase * commissionPct) / 100;
     const amountToPayDriver = driverCommissionAmt - totalAdvances;
     const ownerResult = grossProfit - driverCommissionAmt;
 
@@ -130,7 +134,7 @@ export class AcertosService {
       include: {
         trip: {
           include: {
-            vehicle: { select: { id: true, plate: true, brand: true, model: true } },
+            vehicle: { select: { id: true, plate: true, brand: true, model: true, vehicleType: true } },
             driver: { select: { id: true, name: true, commissionPct: true } },
             expenses: {
               include: { category: { select: { id: true, name: true, icon: true, color: true } } },

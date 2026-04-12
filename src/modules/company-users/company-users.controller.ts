@@ -8,6 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../core/auth/guards/roles.guard';
@@ -18,6 +19,8 @@ import { CompanyUsersService } from './company-users.service';
 import { CreateCompanyUserDto } from './dto/create-company-user.dto';
 import { UpdateCompanyUserDto } from './dto/update-company-user.dto';
 
+@ApiTags('Equipe')
+@ApiBearerAuth('access-token')
 @Controller('company-users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CompanyUsersController {

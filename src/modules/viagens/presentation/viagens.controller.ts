@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { ViagensService } from '../application/viagens.service';
 import { JwtAuthGuard } from '../../../core/auth/guards/jwt-auth.guard';
@@ -19,6 +20,8 @@ import type { AuthUser } from '../../../shared/domain/auth-user.interface';
 import { CriarViagemDto } from './dto/criar-viagem.dto';
 import { AtualizarViagemDto } from './dto/atualizar-viagem.dto';
 
+@ApiTags('Viagens')
+@ApiBearerAuth('access-token')
 @Controller('trips')
 @UseGuards(JwtAuthGuard)
 export class ViagensController {

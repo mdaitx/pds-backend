@@ -11,6 +11,7 @@ import {
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { VeiculosService } from './veiculos.service';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
@@ -28,6 +29,8 @@ const VEHICLE_PREFIX = 'vehicles';
 const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
+@ApiTags('Veículos')
+@ApiBearerAuth('access-token')
 @Controller('vehicles')
 @UseGuards(JwtAuthGuard)
 export class VeiculosController {

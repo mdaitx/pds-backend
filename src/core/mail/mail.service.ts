@@ -1,39 +1,30 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
 
 /**
- * Envio opcional via SMTP (nodemailer).
- * Sem SMTP_HOST configurado, os envios são ignorados (log em debug) — não quebra fluxos da API.
+ * E-mails transacionais via API Resend (HTTPS). Sem RESEND_API_KEY + RESEND_FROM, apenas log em debug.
  */
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
-  private transporter: Transporter | null = null;
+  private resendApiKey: string | null = null;
+  private resendFrom: string | null = null;
 
   onModuleInit() {
-    const host = process.env.SMTP_HOST?.trim();
-    if (!host) {
-      this.logger.warn(
-        'SMTP_HOST não definido: e-mails transacionais (task 12) estão desligados. Configure SMTP_* no ambiente.',
+    const key = process.env.RESEND_API_KEY?.trim();
+    const from = process.env.RESEND_FROM?.trim();
+    if (key && from) {
+      this.resendApiKey = key;
+      this.resendFrom = from;
+      this.logger.log('Envio de e-mail ativo (Resend).');
+    } else {
+      this.logger.log(
+        'E-mails transacionais desligados (defina RESEND_API_KEY e RESEND_FROM — ver documentação).',
       );
-      return;
     }
-    const port = parseInt(process.env.SMTP_PORT ?? '587', 10);
-    const user = process.env.SMTP_USER?.trim();
-    const pass = process.env.SMTP_PASS?.trim();
-    const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-    this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: user && pass ? { user, pass } : undefined,
-    });
-    this.logger.log(`SMTP configurado (${host}:${port}).`);
   }
 
   isEnabled(): boolean {
-    return this.transporter != null;
+    return this.resendApiKey != null && this.resendFrom != null;
   }
 
   async sendMail(params: {
@@ -42,26 +33,48 @@ export class MailService implements OnModuleInit {
     text: string;
     html?: string;
   }): Promise<void> {
-    if (!this.transporter) {
+    if (!this.resendApiKey || !this.resendFrom) {
       this.logger.debug(`[e-mail omitido] ${params.subject} → ${JSON.stringify(params.to)}`);
       return;
     }
-    const from =
-      process.env.SMTP_FROM?.trim() ||
-      process.env.SMTP_USER?.trim() ||
-      'noreply@localhost';
+    const toList = Array.isArray(params.to) ? params.to : [params.to];
+    const html =
+      params.html ??
+      `<pre style="font-family:system-ui,sans-serif;font-size:14px;white-space:pre-wrap">${escapeHtml(
+        params.text,
+      )}</pre>`;
     try {
-      await this.transporter.sendMail({
-        from,
-        to: params.to,
-        subject: params.subject,
-        text: params.text,
-        html: params.html ?? `<pre style="font-family:sans-serif">${params.text}</pre>`,
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: this.resendFrom,
+          to: toList,
+          subject: params.subject,
+          text: params.text,
+          html,
+        }),
       });
+      if (!res.ok) {
+        const body = await res.text();
+        this.logger.error(`Resend HTTP ${res.status}: ${body}`);
+        return;
+      }
     } catch (e) {
       this.logger.error(
         `Falha ao enviar e-mail: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

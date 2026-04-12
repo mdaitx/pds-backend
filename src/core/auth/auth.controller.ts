@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService, AuthUser } from './auth.service';
 import { RegisterProfileDto } from './dto/register-profile.dto';
 import { RecoverPasswordDto } from './dto/recover-password.dto';
@@ -16,6 +17,7 @@ import { Role } from '@prisma/client';
  * - /auth/recover-password: envia e-mail de recuperação (público).
  * - /auth/admin-only: exemplo de rota restrita por role.
  */
+@ApiTags('Autenticação')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -23,6 +25,7 @@ export class AuthController {
   /** Retorna o usuário atual; valida JWT e cria registro em users se for primeiro acesso. */
   @Get('me')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   async me(@CurrentUser() user: AuthUser): Promise<AuthUser> {
     return user;
   }
@@ -30,6 +33,7 @@ export class AuthController {
   /** Registra/atualiza o perfil (role) após o primeiro login (Dono ou Motorista). */
   @Post('register-profile')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   async registerProfile(
     @CurrentUser() user: AuthUser,
     @Body() dto: RegisterProfileDto,
@@ -40,6 +44,7 @@ export class AuthController {
 
   /** Envia e-mail de recuperação de senha; não requer autenticação. */
   @Post('recover-password')
+  @ApiOperation({ summary: 'Recuperação de senha (público, sem Bearer)' })
   async recoverPassword(@Body() dto: RecoverPasswordDto): Promise<{ message: string }> {
     return this.authService.recoverPassword(dto.email);
   }
@@ -48,6 +53,7 @@ export class AuthController {
   @Get('admin-only')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.OWNER, Role.ADMIN)
+  @ApiBearerAuth('access-token')
   adminOnly(@CurrentUser() user: AuthUser): AuthUser {
     return user;
   }
