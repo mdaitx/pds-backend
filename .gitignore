@@ -15,9 +15,8 @@
 /build
 *.tsbuildinfo
 
-# Environment — do not commit secrets; keep .env.example tracked for documentation
+# Environment — não versionar variáveis nem template local (.env, .env.*, .env.example)
 .env*
-!.env.example
 
 # TLS / local certs
 *.pem
