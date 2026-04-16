@@ -158,6 +158,8 @@ model Driver {
   phone               String?
   email               String?
   commissionPct       Decimal?      @map("commission_pct") @db.Decimal(5, 2)
+  /// Salário mensal fixo (encargo do proprietário; usado nos relatórios por motorista).
+  monthlySalary       Decimal       @default(0) @map("monthly_salary") @db.Decimal(12, 2)
   paymentMethod      String?       @map("payment_method")
   pixKey              String?       @map("pix_key")
   bankName            String?       @map("bank_name")

@@ -57,6 +57,7 @@ export class MotoristasService {
     return list.map((d) => ({
       ...d,
       commissionPct: d.commissionPct != null ? Number(d.commissionPct) : null,
+      monthlySalary: Number(d.monthlySalary),
       preferredVehicle: d.preferredVehicle ?? undefined,
       photoUrl: d.photoUrl ?? undefined,
     }));
@@ -74,6 +75,7 @@ export class MotoristasService {
     return {
       ...driver,
       commissionPct: driver.commissionPct != null ? Number(driver.commissionPct) : null,
+      monthlySalary: Number(driver.monthlySalary),
       preferredVehicle: driver.preferredVehicle ?? undefined,
       photoUrl: driver.photoUrl ?? undefined,
     };
@@ -117,6 +119,7 @@ export class MotoristasService {
         phone: dto.phone?.trim() || undefined,
         email: dto.email?.trim() || undefined,
         commissionPct: dto.commissionPct != null ? new Decimal(dto.commissionPct) : undefined,
+        monthlySalary: new Decimal(dto.monthlySalary),
         paymentMethod: dto.paymentMethod?.trim() || undefined,
         pixKey: dto.pixKey?.trim() || undefined,
         bankName: dto.bankName?.trim() || undefined,
@@ -131,6 +134,7 @@ export class MotoristasService {
     return {
       ...created,
       commissionPct: created.commissionPct != null ? Number(created.commissionPct) : null,
+      monthlySalary: Number(created.monthlySalary),
       photoUrl: created.photoUrl ?? undefined,
     };
   }
@@ -186,6 +190,9 @@ export class MotoristasService {
         ...(dto.commissionPct !== undefined && {
           commissionPct: new Decimal(dto.commissionPct),
         }),
+        ...(dto.monthlySalary !== undefined && {
+          monthlySalary: new Decimal(dto.monthlySalary),
+        }),
         ...(dto.paymentMethod !== undefined && { paymentMethod: dto.paymentMethod?.trim() || null }),
         ...(dto.pixKey !== undefined && { pixKey: dto.pixKey?.trim() || null }),
         ...(dto.bankName !== undefined && { bankName: dto.bankName?.trim() || null }),
@@ -204,6 +211,7 @@ export class MotoristasService {
     return {
       ...updated,
       commissionPct: updated.commissionPct != null ? Number(updated.commissionPct) : null,
+      monthlySalary: Number(updated.monthlySalary),
       photoUrl: updated.photoUrl ?? undefined,
     };
   }

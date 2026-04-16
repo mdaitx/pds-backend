@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   ServiceUnavailableException,
@@ -9,7 +11,14 @@ import type { User } from '@prisma/client';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
+import type { Express } from 'express';
 import type { AuthUser } from '../../shared/domain/auth-user.interface';
+import type { UpdateProfileDto } from './dto/update-profile.dto';
+import { UPLOAD_MAX_FILE_BYTES } from '../../common/constants/upload-limits';
+
+const PROFILE_PHOTO_BUCKET = 'uploads';
+const USER_PHOTO_PREFIX = 'users';
+const PROFILE_PHOTO_MIMES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
 /** Re-export para compatibilidade. Preferir importar de shared/domain/auth-user.interface */
 export type { AuthUser } from '../../shared/domain/auth-user.interface';
@@ -117,13 +126,7 @@ export class AuthService {
         email: authUser.email,
       });
 
-      return {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        supabaseUserId: user.supabaseUserId!,
-        companyId: user.companyId ?? null,
-      };
+      return this.toAuthUser(user);
     } catch (e) {
       if (e instanceof UnauthorizedException) throw e;
       if (this.isDatabaseConnectionError(e)) {
@@ -151,11 +154,71 @@ export class AuthService {
     }
   }
 
+  private toAuthUser(user: User): AuthUser {
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      supabaseUserId: user.supabaseUserId!,
+      companyId: user.companyId ?? null,
+      photoUrl: user.photoUrl ?? null,
+      displayName: user.displayName ?? null,
+    };
+  }
+
+  /** Atualiza dados do próprio usuário (ex.: remover foto enviando photoUrl null). */
+  async updateMyProfile(user: AuthUser, dto: UpdateProfileDto): Promise<AuthUser> {
+    const data: { photoUrl?: string | null } = {};
+    if (dto.photoUrl !== undefined) {
+      data.photoUrl = dto.photoUrl;
+    }
+    if (Object.keys(data).length === 0) {
+      const row = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      return this.toAuthUser(row);
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data,
+    });
+    return this.toAuthUser(updated);
+  }
+
+  /** Upload de foto de perfil: grava no Storage e atualiza usuarios.photo_url. */
+  async uploadProfilePhoto(user: AuthUser, file: Express.Multer.File): Promise<AuthUser> {
+    if (!PROFILE_PHOTO_MIMES.includes(file.mimetype as (typeof PROFILE_PHOTO_MIMES)[number])) {
+      throw new BadRequestException('Tipo de arquivo inválido. Use JPEG, PNG ou WebP.');
+    }
+    if (file.size > UPLOAD_MAX_FILE_BYTES) {
+      throw new BadRequestException('Arquivo muito grande.');
+    }
+    const ext = ['image/jpeg', 'image/jpg'].includes(file.mimetype) ? 'jpg' : file.mimetype === 'image/png' ? 'png' : 'webp';
+    const storage = this.supabase.getStorage();
+    const path = `${USER_PHOTO_PREFIX}/${user.id}/${Date.now()}.${ext}`;
+    const { data, error } = await storage.from(PROFILE_PHOTO_BUCKET).upload(path, file.buffer, {
+      contentType: file.mimetype || 'image/jpeg',
+      upsert: true,
+    });
+    if (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+    const { data: urlData } = storage.from(PROFILE_PHOTO_BUCKET).getPublicUrl(data.path);
+    const publicUrl = urlData.publicUrl;
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { photoUrl: publicUrl },
+    });
+    return this.toAuthUser(updated);
+  }
+
   /**
    * Registra o perfil (role) do usuário após o primeiro login.
-   * Usado no wizard quando o usuário escolhe ser Dono ou Motorista.
+   * Só Dono ou Motorista; não permite escalonar para ADMIN nem trocas perigosas após vínculo com empresa.
    */
-  async registerProfile(supabaseUserId: string, role: Role): Promise<AuthUser> {
+  async registerProfile(supabaseUserId: string, requestedRole: Role): Promise<AuthUser> {
+    if (requestedRole !== Role.OWNER && requestedRole !== Role.DRIVER) {
+      throw new BadRequestException('Papel inválido. Use dono ou motorista.');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { supabaseUserId },
     });
@@ -164,18 +227,48 @@ export class AuthService {
       throw new UnauthorizedException('Usuário não encontrado');
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id: user.id },
-      data: { role },
+    if (user.role === Role.ADMIN) {
+      throw new ForbiddenException(
+        'Contas de administrador não utilizam este cadastro.',
+      );
+    }
+
+    const companyAsOwner = await this.prisma.company.findUnique({
+      where: { ownerId: user.id },
+      select: { id: true },
     });
 
-    return {
-      id: updated.id,
-      email: updated.email,
-      role: updated.role,
-      supabaseUserId: updated.supabaseUserId!,
-      companyId: updated.companyId ?? null,
-    };
+    if (user.role === Role.DRIVER) {
+      if (requestedRole === Role.OWNER) {
+        throw new ForbiddenException(
+          'Não é possível promover o perfil por este fluxo.',
+        );
+      }
+      return this.toAuthUser(user);
+    }
+
+    if (user.role === Role.OWNER) {
+      if (requestedRole === Role.OWNER) {
+        return this.toAuthUser(user);
+      }
+      if (companyAsOwner) {
+        throw new ForbiddenException(
+          'Não é possível alterar o papel do proprietário titular por este fluxo.',
+        );
+      }
+      if (user.companyId) {
+        throw new ForbiddenException(
+          'Conta já vinculada a uma frota. Use o fluxo administrativo da empresa.',
+        );
+      }
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { role: requestedRole },
+    });
+
+    return this.toAuthUser(updated);
   }
 
   /**

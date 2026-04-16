@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser } from '../../shared/domain/auth-user.interface';
@@ -25,13 +25,29 @@ export class DriverAuthService {
     });
     if (byUserId) return byUserId;
 
-    const byEmail = await this.prisma.driver.findFirst({
+    const byEmailRows = await this.prisma.driver.findMany({
       where: {
         companyId: user.companyId,
         email: { equals: user.email, mode: 'insensitive' },
       },
-      select: { id: true, companyId: true },
+      select: { id: true, companyId: true, userId: true },
+      orderBy: { id: 'asc' },
     });
-    return byEmail;
+    if (byEmailRows.length === 0) {
+      return null;
+    }
+    if (byEmailRows.length === 1) {
+      return {
+        id: byEmailRows[0].id,
+        companyId: byEmailRows[0].companyId,
+      };
+    }
+    const linkedToUser = byEmailRows.find((d) => d.userId === user.id);
+    if (linkedToUser) {
+      return { id: linkedToUser.id, companyId: linkedToUser.companyId };
+    }
+    throw new ForbiddenException(
+      'Há mais de um motorista com este e-mail na frota. Peça ao gestor para corrigir o cadastro.',
+    );
   }
 }
