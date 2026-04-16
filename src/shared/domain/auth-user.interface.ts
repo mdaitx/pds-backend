@@ -11,4 +11,7 @@ export interface AuthUser {
   supabaseUserId: string;
   /** Empresa da frota (admin / co-proprietário); dono titular costuma resolver via Company.ownerId. */
   companyId?: string | null;
+  /** Foto de perfil (URL pública no Storage). */
+  photoUrl?: string | null;
+  displayName?: string | null;
 }

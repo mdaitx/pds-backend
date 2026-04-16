@@ -23,11 +23,11 @@ import { Role } from '@prisma/client';
 import { CriarVeiculoDto } from './dto/criar-veiculo.dto';
 import { AtualizarVeiculoDto } from './dto/atualizar-veiculo.dto';
 import { SupabaseService } from '../../core/supabase/supabase.service';
+import { UPLOAD_MAX_FILE_BYTES } from '../../common/constants/upload-limits';
 
 const BUCKET = 'uploads';
 const VEHICLE_PREFIX = 'vehicles';
 const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 @ApiTags('Veículos')
 @ApiBearerAuth('access-token')
@@ -56,7 +56,7 @@ export class VeiculosController {
   @Post('upload')
   @UseGuards(RolesGuard)
   @Roles(Role.OWNER, Role.ADMIN)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_SIZE_BYTES } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: UPLOAD_MAX_FILE_BYTES } }))
   async uploadPhoto(
     @CurrentUser() user: AuthUser,
     @UploadedFile() file: Express.Multer.File | undefined,
@@ -67,8 +67,8 @@ export class VeiculosController {
     if (!ALLOWED_MIMES.includes(file.mimetype)) {
       throw new BadRequestException('Tipo de arquivo inválido. Use JPEG, PNG ou WebP.');
     }
-    if (file.size > MAX_SIZE_BYTES) {
-      throw new BadRequestException('Arquivo muito grande. Máximo 5 MB.');
+    if (file.size > UPLOAD_MAX_FILE_BYTES) {
+      throw new BadRequestException('Arquivo muito grande. Máximo 15 MB.');
     }
     const ext = ['image/jpeg', 'image/jpg'].includes(file.mimetype) ? 'jpg' : file.mimetype === 'image/png' ? 'png' : 'webp';
     const storage = this.supabase.getStorage();

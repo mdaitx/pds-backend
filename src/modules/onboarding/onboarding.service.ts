@@ -197,6 +197,8 @@ export class OnboardingService {
         phone: dto.phone ?? undefined,
         email: dto.email ?? undefined,
         commissionPct: dto.commissionPct != null ? new Decimal(dto.commissionPct) : undefined,
+        monthlySalary:
+          dto.monthlySalary != null ? new Decimal(dto.monthlySalary) : new Decimal(0),
         companyId: company.id,
       },
     });

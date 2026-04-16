@@ -11,6 +11,7 @@ import {
   IsEmail,
   ValidateIf,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { DriverStatus } from '@prisma/client';
 
 export class CriarMotoristaDto {
@@ -58,6 +59,12 @@ export class CriarMotoristaDto {
   @Min(0)
   @Max(100)
   commissionPct?: number;
+
+  @ApiProperty({ minimum: 0, description: 'Salário mensal fixo (BRL), para relatórios por motorista' })
+  @IsNumber()
+  @Type(() => Number)
+  @Min(0)
+  monthlySalary: number;
 
   @ApiPropertyOptional({ maxLength: 50 })
   @IsString()

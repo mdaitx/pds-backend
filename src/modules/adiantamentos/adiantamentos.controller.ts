@@ -14,22 +14,26 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AdiantamentosService } from './adiantamentos.service';
 import { JwtAuthGuard } from '../../core/auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../core/auth/guards/roles.guard';
+import { Roles } from '../../core/auth/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 import { CurrentUser } from '../../core/auth/decorators/current-user.decorator';
 import type { AuthUser } from '../../core/auth/auth.service';
 import { CriarAdiantamentoDto } from './dto/criar-adiantamento.dto';
 import { AtualizarAdiantamentoDto } from './dto/atualizar-adiantamento.dto';
 import { SupabaseService } from '../../core/supabase/supabase.service';
 import { BadRequestException } from '@nestjs/common';
+import { UPLOAD_MAX_FILE_BYTES } from '../../common/constants/upload-limits';
 
 const BUCKET = 'uploads';
 const ADVANCE_PREFIX = 'advance-receipts';
 const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 @ApiTags('Adiantamentos')
 @ApiBearerAuth('access-token')
 @Controller('advances')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.OWNER, Role.ADMIN, Role.DRIVER)
 export class AdiantamentosController {
   constructor(
     private readonly adiantamentosService: AdiantamentosService,
@@ -47,7 +51,7 @@ export class AdiantamentosController {
   }
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_SIZE_BYTES } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: UPLOAD_MAX_FILE_BYTES } }))
   async uploadReceipt(
     @CurrentUser() user: AuthUser,
     @UploadedFile() file: Express.Multer.File | undefined,
@@ -58,8 +62,8 @@ export class AdiantamentosController {
     if (!ALLOWED_MIMES.includes(file.mimetype)) {
       throw new BadRequestException('Tipo inválido. Use JPEG, PNG, WebP ou PDF.');
     }
-    if (file.size > MAX_SIZE_BYTES) {
-      throw new BadRequestException('Arquivo muito grande. Máximo 5 MB.');
+    if (file.size > UPLOAD_MAX_FILE_BYTES) {
+      throw new BadRequestException('Arquivo muito grande. Máximo 15 MB.');
     }
     const ext =
       file.mimetype === 'application/pdf'

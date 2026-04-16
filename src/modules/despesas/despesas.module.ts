@@ -4,10 +4,9 @@ import { DespesasService } from './despesas.service';
 import { AuthModule } from '../../core/auth/auth.module';
 import { PrismaModule } from '../../core/prisma/prisma.module';
 import { SupabaseModule } from '../../core/supabase/supabase.module';
-import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [AuthModule, PrismaModule, SupabaseModule, NotificationsModule],
+  imports: [AuthModule, PrismaModule, SupabaseModule],
   controllers: [DespesasController],
   providers: [DespesasService],
   exports: [DespesasService],

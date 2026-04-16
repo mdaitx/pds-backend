@@ -126,4 +126,11 @@ export class CreateOnboardingFirstDriverDto {
   @Min(0)
   @Max(100)
   commissionPct?: number;
+
+  @ApiPropertyOptional({ minimum: 0, description: 'Salário mensal fixo (BRL)' })
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  monthlySalary?: number;
 }

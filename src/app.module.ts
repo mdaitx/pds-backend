@@ -1,7 +1,7 @@
 /**
- * MÃ³dulo raiz da aplicaÃ§Ã£o NestJS.
+ * Módulo raiz da aplicação NestJS.
  *
- * Estrutura: common, core (prisma, supabase, auth), modules (domÃ­nio).
+ * Estrutura: common, core (prisma, supabase, auth), modules (domínio).
  */
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
@@ -21,11 +21,13 @@ import { AcertosModule } from './modules/acertos/acertos.module';
 import { CompanyAccessModule } from './core/company-access/company-access.module';
 import { CompanyUsersModule } from './modules/company-users/company-users.module';
 import { MailModule } from './core/mail/mail.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
     PrismaModule,
     MailModule,
+    NotificationsModule,
     SupabaseModule,
     CompanyAccessModule,
     AuthModule,

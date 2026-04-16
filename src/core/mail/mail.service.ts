@@ -16,6 +16,11 @@ export class MailService implements OnModuleInit {
       this.resendApiKey = key;
       this.resendFrom = from;
       this.logger.log('Envio de e-mail ativo (Resend).');
+      if (/onboarding@resend\.dev|@resend\.dev/i.test(from)) {
+        this.logger.warn(
+          'RESEND_FROM usa o domínio de testes da Resend: só é possível entregar para o e-mail da sua conta Resend até verificar um domínio próprio (https://resend.com/domains).',
+        );
+      }
     } else {
       this.logger.log(
         'E-mails transacionais desligados (defina RESEND_API_KEY e RESEND_FROM — ver documentação).',
@@ -60,7 +65,7 @@ export class MailService implements OnModuleInit {
       });
       if (!res.ok) {
         const body = await res.text();
-        this.logger.error(`Resend HTTP ${res.status}: ${body}`);
+        this.logResendFailure(res.status, body);
         return;
       }
     } catch (e) {
@@ -68,6 +73,34 @@ export class MailService implements OnModuleInit {
         `Falha ao enviar e-mail: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
+  }
+  /**
+   * Explica 403 de domínio / modo teste da Resend sem poluir o log com JSON bruto.
+   */
+  private logResendFailure(status: number, body: string): void {
+    let message = '';
+    try {
+      const j = JSON.parse(body) as { message?: string; name?: string };
+      message = typeof j.message === 'string' ? j.message : '';
+    } catch {
+      message = body;
+    }
+
+    const isDomainOrTestingLimit =
+      status === 403 &&
+      /verify a domain|testing emails|only send|your own email/i.test(message);
+
+    if (isDomainOrTestingLimit) {
+      this.logger.error(
+        [
+          `Resend HTTP ${status} (limite de envio): ${message}`,
+          'Solução: verifique um domínio em https://resend.com/domains e defina RESEND_FROM com um endereço desse domínio (ex.: "App <noreply@seudominio.com>"). Enquanto isso, em conta de testes só chega e-mail ao endereço da conta Resend.',
+        ].join(' '),
+      );
+      return;
+    }
+
+    this.logger.error(`Resend HTTP ${status}: ${body}`);
   }
 }
 
