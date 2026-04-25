@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -24,6 +25,7 @@ import { CriarMotoristaDto } from './dto/criar-motorista.dto';
 import { AtualizarMotoristaDto } from './dto/atualizar-motorista.dto';
 import { SupabaseService } from '../../core/supabase/supabase.service';
 import { UPLOAD_MAX_FILE_BYTES } from '../../common/constants/upload-limits';
+import { parsePaginationQuery } from '../../common/pagination';
 
 const BUCKET = 'uploads';
 const DRIVER_PREFIX = 'drivers';
@@ -42,8 +44,8 @@ export class MotoristasController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles(Role.OWNER, Role.ADMIN)
-  async findAll(@CurrentUser() user: AuthUser) {
-    return this.motoristasService.findAll(user);
+  async findAll(@CurrentUser() user: AuthUser, @Query() query?: Record<string, unknown>) {
+    return this.motoristasService.findAll(user, parsePaginationQuery(query ?? {}));
   }
 
   @Get(':id')

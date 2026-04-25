@@ -10,6 +10,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CompanyAccessService } from '../../core/company-access/company-access.service';
 import type { AuthUser } from '../../core/auth/auth.service';
+import { paginateResult, type PaginationOptions } from '../../common/pagination';
 import { CriarMotoristaDto } from './dto/criar-motorista.dto';
 import { AtualizarMotoristaDto } from './dto/atualizar-motorista.dto';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -49,20 +50,23 @@ export class MotoristasService {
     }
   }
 
-  async findAll(user: AuthUser) {
+  async findAll(user: AuthUser, pagination: PaginationOptions = {}) {
     const companyId = await this.getCompanyId(user);
     const list = await this.prisma.driver.findMany({
       where: { companyId },
       include: { preferredVehicle: { select: { id: true, plate: true, model: true } } },
-      orderBy: { name: 'asc' },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      ...(pagination.limit ? { take: pagination.limit + 1 } : {}),
+      ...(pagination.cursor ? { cursor: { id: pagination.cursor }, skip: 1 } : {}),
     });
-    return list.map((d) => ({
+    const mapped = list.map((d) => ({
       ...d,
       commissionPct: d.commissionPct != null ? Number(d.commissionPct) : null,
       monthlySalary: Number(d.monthlySalary),
       preferredVehicle: d.preferredVehicle ?? undefined,
       photoUrl: d.photoUrl ?? undefined,
     }));
+    return pagination.limit ? paginateResult(mapped, pagination.limit) : mapped;
   }
 
   async findOne(user: AuthUser, id: string) {

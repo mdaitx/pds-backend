@@ -9,13 +9,17 @@ import 'dotenv/config';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import compression from 'compression';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { RouteTimingInterceptor } from './common/interceptors/route-timing.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
+  app.use(compression());
   app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new RouteTimingInterceptor());
 
   // Validação global: remove campos não declarados nos DTOs (segurança) e
   // rejeita requisições com propriedades extras (evita injeção de dados).

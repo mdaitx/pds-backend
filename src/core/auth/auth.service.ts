@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import type { User } from '@prisma/client';
 import { Role } from '@prisma/client';
@@ -19,6 +20,7 @@ import { UPLOAD_MAX_FILE_BYTES } from '../../common/constants/upload-limits';
 const PROFILE_PHOTO_BUCKET = 'uploads';
 const USER_PHOTO_PREFIX = 'users';
 const PROFILE_PHOTO_MIMES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+const AUTH_CACHE_TTL_MS = 60_000;
 
 /** Re-export para compatibilidade. Preferir importar de shared/domain/auth-user.interface */
 export type { AuthUser } from '../../shared/domain/auth-user.interface';
@@ -31,6 +33,8 @@ export type { AuthUser } from '../../shared/domain/auth-user.interface';
  */
 @Injectable()
 export class AuthService {
+  private readonly authCache = new Map<string, { user: AuthUser; expiresAt: number }>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly supabase: SupabaseService,
@@ -104,6 +108,15 @@ export class AuthService {
    * Lança UnauthorizedException se o token for inválido ou expirado.
    */
   async validateSupabaseToken(accessToken: string): Promise<AuthUser> {
+    const cacheKey = createHash('sha256').update(accessToken).digest('hex');
+    const cached = this.authCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.user;
+    }
+    if (cached) {
+      this.authCache.delete(cacheKey);
+    }
+
     let authUser: { id: string; email?: string } | null = null;
     let error: { message?: string } | null = null;
 
@@ -126,7 +139,12 @@ export class AuthService {
         email: authUser.email,
       });
 
-      return this.toAuthUser(user);
+      const result = this.toAuthUser(user);
+      this.authCache.set(cacheKey, {
+        user: result,
+        expiresAt: Date.now() + AUTH_CACHE_TTL_MS,
+      });
+      return result;
     } catch (e) {
       if (e instanceof UnauthorizedException) throw e;
       if (this.isDatabaseConnectionError(e)) {

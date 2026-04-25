@@ -8,6 +8,7 @@ import { VehicleType, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CompanyAccessService } from '../../core/company-access/company-access.service';
 import type { AuthUser } from '../../core/auth/auth.service';
+import { paginateResult, type PaginationOptions } from '../../common/pagination';
 import { CriarVeiculoDto } from './dto/criar-veiculo.dto';
 import { AtualizarVeiculoDto } from './dto/atualizar-veiculo.dto';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -111,17 +112,20 @@ export class VeiculosService {
     return map;
   }
 
-  async findAll(user: AuthUser) {
+  async findAll(user: AuthUser, pagination: PaginationOptions = {}) {
     const companyId = await this.getCompanyId(user);
     const list = await this.prisma.vehicle.findMany({
       where: { companyId },
-      orderBy: [{ brand: 'asc' }, { model: 'asc' }],
+      orderBy: [{ brand: 'asc' }, { model: 'asc' }, { id: 'asc' }],
       include: { trailerVehicle: { select: pairSelect } },
+      ...(pagination.limit ? { take: pagination.limit + 1 } : {}),
+      ...(pagination.cursor ? { cursor: { id: pagination.cursor }, skip: 1 } : {}),
     });
     const tractorBySemi = await this.attachTractorsToSemis(companyId, list);
-    return list.map((v) =>
+    const mapped = list.map((v) =>
       this.mapOne(v, tractorBySemi.get(v.id) ?? null),
     );
+    return pagination.limit ? paginateResult(mapped, pagination.limit) : mapped;
   }
 
   async findOne(user: AuthUser, id: string) {

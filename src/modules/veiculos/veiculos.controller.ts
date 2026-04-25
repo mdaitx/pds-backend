@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -24,6 +25,7 @@ import { CriarVeiculoDto } from './dto/criar-veiculo.dto';
 import { AtualizarVeiculoDto } from './dto/atualizar-veiculo.dto';
 import { SupabaseService } from '../../core/supabase/supabase.service';
 import { UPLOAD_MAX_FILE_BYTES } from '../../common/constants/upload-limits';
+import { parsePaginationQuery } from '../../common/pagination';
 
 const BUCKET = 'uploads';
 const VEHICLE_PREFIX = 'vehicles';
@@ -42,8 +44,8 @@ export class VeiculosController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles(Role.OWNER, Role.ADMIN)
-  async findAll(@CurrentUser() user: AuthUser) {
-    return this.veiculosService.findAll(user);
+  async findAll(@CurrentUser() user: AuthUser, @Query() query?: Record<string, unknown>) {
+    return this.veiculosService.findAll(user, parsePaginationQuery(query ?? {}));
   }
 
   @Get(':id')

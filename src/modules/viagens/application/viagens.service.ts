@@ -10,6 +10,7 @@ import type { AuthUser } from '../../../shared/domain/auth-user.interface';
 import { CompanyAccessService } from '../../../core/company-access/company-access.service';
 import { NotificationEventsService } from '../../notifications/notification-events.service';
 import { SubscriptionService } from '../../subscription/subscription.service';
+import type { PaginationOptions } from '../../../common/pagination';
 import type { IViagemRepository } from '../domain/ports/viagem.repository.port';
 import type { CriarViagemInput, AtualizarViagemInput } from '../domain/ports/viagem.repository.port';
 
@@ -37,7 +38,7 @@ export class ViagensService {
     }
   }
 
-  async findAll(user: AuthUser, status?: string) {
+  async findAll(user: AuthUser, status?: string, pagination: PaginationOptions = {}) {
     if (user.role !== Role.OWNER && user.role !== Role.DRIVER && user.role !== Role.ADMIN) {
       throw new ForbiddenException('Acesso negado');
     }
@@ -45,6 +46,12 @@ export class ViagensService {
       status && Object.values(TripStatus).includes(status as TripStatus)
         ? (status as TripStatus)
         : undefined;
+    if (pagination.limit) {
+      return this.viagemRepository.findMany(user, tripStatus, {
+        limit: pagination.limit,
+        cursor: pagination.cursor,
+      });
+    }
     return this.viagemRepository.findMany(user, tripStatus);
   }
 

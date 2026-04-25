@@ -26,12 +26,7 @@ export class AcertosService {
   private async ensureCanAccessTrip(user: AuthUser, tripId: string) {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
-      include: {
-        driver: true,
-        expenses: true,
-        advances: true,
-        settlement: true,
-      },
+      select: { id: true, companyId: true, driverId: true },
     });
     if (!trip) {
       throw new NotFoundException('Viagem nao encontrada');

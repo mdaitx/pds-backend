@@ -4,6 +4,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { CompanyAccessService } from '../../../../core/company-access/company-access.service';
 import { DriverAuthService } from '../../../../core/driver-auth/driver-auth.service';
+import { paginateResult, type PaginatedResult, type PaginationOptions } from '../../../../common/pagination';
 import type { AuthUser } from '../../../../shared/domain/auth-user.interface';
 import type {
   IViagemRepository,
@@ -11,6 +12,11 @@ import type {
   AtualizarViagemInput,
   ViagemComRelacoes,
 } from '../../domain/ports/viagem.repository.port';
+
+const tripRelationsSelect = {
+  vehicle: { select: { id: true, plate: true, brand: true, model: true, vehicleType: true } },
+  driver: { select: { id: true, name: true } },
+} as const;
 
 function toViagemComRelacoes(trip: {
   id: string;
@@ -71,7 +77,17 @@ export class ViagemPrismaRepository implements IViagemRepository {
     return `${prefix}${String(seq).padStart(4, '0')}`;
   }
 
-  async findMany(user: AuthUser, status?: TripStatus): Promise<ViagemComRelacoes[]> {
+  async findMany(user: AuthUser, status?: TripStatus): Promise<ViagemComRelacoes[]>;
+  async findMany(
+    user: AuthUser,
+    status: TripStatus | undefined,
+    pagination: Required<Pick<PaginationOptions, 'limit'>> & Pick<PaginationOptions, 'cursor'>,
+  ): Promise<PaginatedResult<ViagemComRelacoes>>;
+  async findMany(
+    user: AuthUser,
+    status?: TripStatus,
+    pagination?: Required<Pick<PaginationOptions, 'limit'>> & Pick<PaginationOptions, 'cursor'>,
+  ): Promise<ViagemComRelacoes[] | PaginatedResult<ViagemComRelacoes>> {
     const where: { companyId?: string; driverId?: string; status?: TripStatus } = {};
     if (user.role === Role.DRIVER) {
       const ctx = await this.driverAuth.findDriverForAuthUser(user);
@@ -87,13 +103,13 @@ export class ViagemPrismaRepository implements IViagemRepository {
     }
     const list = await this.prisma.trip.findMany({
       where,
-      include: {
-        vehicle: { select: { id: true, plate: true, brand: true, model: true, vehicleType: true } },
-        driver: { select: { id: true, name: true } },
-      },
-      orderBy: { startDate: 'desc' },
+      include: tripRelationsSelect,
+      orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+      ...(pagination?.limit ? { take: pagination.limit + 1 } : {}),
+      ...(pagination?.cursor ? { cursor: { id: pagination.cursor }, skip: 1 } : {}),
     });
-    return list.map(toViagemComRelacoes);
+    const mapped = list.map(toViagemComRelacoes);
+    return pagination?.limit ? paginateResult(mapped, pagination.limit) : mapped;
   }
 
   async findById(user: AuthUser, id: string): Promise<ViagemComRelacoes | null> {
@@ -102,14 +118,14 @@ export class ViagemPrismaRepository implements IViagemRepository {
       const companyId = await this.companyAccess.resolveCompanyId(user);
       trip = await this.prisma.trip.findFirst({
         where: { id, companyId },
-        include: { vehicle: true, driver: true },
+        include: tripRelationsSelect,
       });
     } else if (user.role === Role.DRIVER) {
       const ctx = await this.driverAuth.findDriverForAuthUser(user);
       if (!ctx) return null;
       trip = await this.prisma.trip.findFirst({
         where: { id, driverId: ctx.id },
-        include: { vehicle: true, driver: true },
+        include: tripRelationsSelect,
       });
     } else {
       throw new ForbiddenException('Acesso negado');
@@ -173,8 +189,8 @@ export class ViagemPrismaRepository implements IViagemRepository {
     return toViagemComRelacoes(updated);
   }
 
-  async delete(id: string, _companyId: string): Promise<void> {
-    await this.prisma.trip.delete({ where: { id } });
+  async delete(id: string, companyId: string): Promise<void> {
+    await this.prisma.trip.deleteMany({ where: { id, companyId } });
   }
 
   async validateVehicle(vehicleId: string, companyId: string): Promise<boolean> {

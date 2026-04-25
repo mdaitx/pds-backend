@@ -1,4 +1,5 @@
 import { TripStatus } from '@prisma/client';
+import type { PaginatedResult, PaginationOptions } from '../../../../common/pagination';
 import type { AuthUser } from '../../../../shared/domain/auth-user.interface';
 
 /** Dados para criar uma viagem (camada de aplicação) */
@@ -63,6 +64,11 @@ export interface IViagemRepository {
   getCompanyIdByOwner(userId: string): Promise<string>;
   generateTripCode(companyId: string): Promise<string>;
   findMany(user: AuthUser, status?: TripStatus): Promise<ViagemComRelacoes[]>;
+  findMany(
+    user: AuthUser,
+    status: TripStatus | undefined,
+    pagination: Required<Pick<PaginationOptions, 'limit'>> & Pick<PaginationOptions, 'cursor'>,
+  ): Promise<PaginatedResult<ViagemComRelacoes>>;
   findById(user: AuthUser, id: string): Promise<ViagemComRelacoes | null>;
   create(companyId: string, data: CriarViagemInput): Promise<ViagemComRelacoes>;
   update(id: string, companyId: string, data: AtualizarViagemInput): Promise<ViagemComRelacoes>;
