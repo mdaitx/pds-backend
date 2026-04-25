@@ -15,8 +15,9 @@
 /build
 *.tsbuildinfo
 
-# Environment — não versionar variáveis nem template local (.env, .env.*, .env.example)
+# Environment — nao versionar variaveis reais; .env.example pode ser commitado
 .env*
+!.env.example
 
 # TLS / local certs
 *.pem

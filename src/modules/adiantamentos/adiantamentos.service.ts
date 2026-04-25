@@ -11,6 +11,7 @@ import { DriverAuthService } from '../../core/driver-auth/driver-auth.service';
 import type { AuthUser } from '../../core/auth/auth.service';
 import { CriarAdiantamentoDto } from './dto/criar-adiantamento.dto';
 import { AtualizarAdiantamentoDto } from './dto/atualizar-adiantamento.dto';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 @Injectable()
 export class AdiantamentosService {
@@ -18,6 +19,7 @@ export class AdiantamentosService {
     private readonly prisma: PrismaService,
     private readonly companyAccess: CompanyAccessService,
     private readonly driverAuth: DriverAuthService,
+    private readonly subscription: SubscriptionService,
   ) {}
 
   /**
@@ -94,7 +96,8 @@ export class AdiantamentosService {
   }
 
   async create(user: AuthUser, dto: CriarAdiantamentoDto) {
-    const { tripId } = await this.ensureCanAccessTrip(user, dto.tripId);
+    const { tripId, companyId } = await this.ensureCanAccessTrip(user, dto.tripId);
+    await this.subscription.assertOperationalAccess(companyId);
 
     const created = await this.prisma.advance.create({
       data: {
@@ -120,7 +123,8 @@ export class AdiantamentosService {
     if (!advance) {
       throw new NotFoundException('Adiantamento não encontrado');
     }
-    await this.ensureCanAccessTrip(user, advance.tripId);
+    const { companyId } = await this.ensureCanAccessTrip(user, advance.tripId);
+    await this.subscription.assertOperationalAccess(companyId);
 
     const updated = await this.prisma.advance.update({
       where: { id },
@@ -149,7 +153,8 @@ export class AdiantamentosService {
     if (!advance) {
       throw new NotFoundException('Adiantamento não encontrado');
     }
-    await this.ensureCanAccessTrip(user, advance.tripId);
+    const { companyId } = await this.ensureCanAccessTrip(user, advance.tripId);
+    await this.subscription.assertOperationalAccess(companyId);
     await this.prisma.advance.delete({ where: { id } });
     return { success: true };
   }

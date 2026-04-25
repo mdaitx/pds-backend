@@ -10,6 +10,7 @@ import { CompanyAccessService } from '../../core/company-access/company-access.s
 import type { AuthUser } from '../../core/auth/auth.service';
 import { CriarVeiculoDto } from './dto/criar-veiculo.dto';
 import { AtualizarVeiculoDto } from './dto/atualizar-veiculo.dto';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 const pairSelect = {
   id: true,
@@ -36,6 +37,7 @@ export class VeiculosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly companyAccess: CompanyAccessService,
+    private readonly subscription: SubscriptionService,
   ) {}
 
   private async getCompanyId(user: AuthUser): Promise<string> {
@@ -140,6 +142,7 @@ export class VeiculosService {
 
   async create(user: AuthUser, dto: CriarVeiculoDto) {
     const companyId = await this.getCompanyId(user);
+    await this.subscription.assertCanAddVehicle(companyId);
     const plate = dto.plate.replace(/\s/g, '').toUpperCase().replace(/-/g, '');
     const plateFormatted = plate.length === 7 ? `${plate.slice(0, 3)}-${plate.slice(3)}` : plate;
 
@@ -207,11 +210,13 @@ export class VeiculosService {
       await this.setCavaloTrailer(companyId, dto.tractorVehicleId, created.id);
     }
 
+    void this.subscription.syncBillableSeatsAfterVehicleChange(companyId);
     return this.findOne(user, created.id);
   }
 
   async update(user: AuthUser, id: string, dto: AtualizarVeiculoDto) {
     const companyId = await this.getCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id, companyId },
     });
@@ -339,6 +344,7 @@ export class VeiculosService {
       }
     }
 
+    void this.subscription.syncBillableSeatsAfterVehicleChange(companyId);
     return this.findOne(user, id);
   }
 
@@ -368,6 +374,7 @@ export class VeiculosService {
     }
 
     await this.prisma.vehicle.delete({ where: { id } });
+    void this.subscription.syncBillableSeatsAfterVehicleChange(companyId);
     return { success: true };
   }
 }

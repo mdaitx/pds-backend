@@ -9,6 +9,7 @@ import { Role, TripStatus } from '@prisma/client';
 import type { AuthUser } from '../../../shared/domain/auth-user.interface';
 import { CompanyAccessService } from '../../../core/company-access/company-access.service';
 import { NotificationEventsService } from '../../notifications/notification-events.service';
+import { SubscriptionService } from '../../subscription/subscription.service';
 import type { IViagemRepository } from '../domain/ports/viagem.repository.port';
 import type { CriarViagemInput, AtualizarViagemInput } from '../domain/ports/viagem.repository.port';
 
@@ -25,6 +26,7 @@ export class ViagensService {
     private readonly viagemRepository: IViagemRepository,
     private readonly companyAccess: CompanyAccessService,
     private readonly notificationEvents: NotificationEventsService,
+    private readonly subscription: SubscriptionService,
   ) {}
 
   private async getCompanyId(user: AuthUser): Promise<string> {
@@ -56,6 +58,7 @@ export class ViagensService {
 
   async create(user: AuthUser, dto: CriarViagemInput) {
     const companyId = await this.getCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
 
     const vehicleOk = await this.viagemRepository.validateVehicle(dto.vehicleId, companyId);
     if (!vehicleOk) {
@@ -84,6 +87,7 @@ export class ViagensService {
 
   async update(user: AuthUser, id: string, dto: AtualizarViagemInput) {
     const companyId = await this.getCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const trip = await this.viagemRepository.findById(user, id);
     if (!trip) {
       throw new NotFoundException('Viagem não encontrada');
@@ -120,6 +124,7 @@ export class ViagensService {
 
   async remove(user: AuthUser, id: string) {
     const companyId = await this.getCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const trip = await this.viagemRepository.findById(user, id);
     if (!trip) {
       throw new NotFoundException('Viagem não encontrada');
