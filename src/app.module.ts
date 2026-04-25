@@ -23,6 +23,7 @@ import { CompanyUsersModule } from './modules/company-users/company-users.module
 import { MailModule } from './core/mail/mail.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
     AdiantamentosModule,
     AcertosModule,
     CompanyUsersModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -24,6 +25,7 @@ import { AtualizarAdiantamentoDto } from './dto/atualizar-adiantamento.dto';
 import { SupabaseService } from '../../core/supabase/supabase.service';
 import { BadRequestException } from '@nestjs/common';
 import { UPLOAD_MAX_FILE_BYTES } from '../../common/constants/upload-limits';
+import { parsePaginationQuery } from '../../common/pagination';
 
 const BUCKET = 'uploads';
 const ADVANCE_PREFIX = 'advance-receipts';
@@ -41,8 +43,12 @@ export class AdiantamentosController {
   ) {}
 
   @Get('trip/:tripId')
-  async findByTrip(@CurrentUser() user: AuthUser, @Param('tripId') tripId: string) {
-    return this.adiantamentosService.findByTrip(user, tripId);
+  async findByTrip(
+    @CurrentUser() user: AuthUser,
+    @Param('tripId') tripId: string,
+    @Query() query?: Record<string, unknown>,
+  ) {
+    return this.adiantamentosService.findByTrip(user, tripId, parsePaginationQuery(query ?? {}));
   }
 
   @Get('driver/:driverId')

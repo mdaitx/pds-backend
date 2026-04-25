@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../../../core/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../core/auth/guards/roles.guard';
 import { Roles } from '../../../core/auth/decorators/roles.decorator';
 import { CurrentUser } from '../../../core/auth/decorators/current-user.decorator';
+import { parsePaginationQuery } from '../../../common/pagination';
 import type { AuthUser } from '../../../shared/domain/auth-user.interface';
 import { CriarViagemDto } from './dto/criar-viagem.dto';
 import { AtualizarViagemDto } from './dto/atualizar-viagem.dto';
@@ -33,8 +34,9 @@ export class ViagensController {
   async findAll(
     @CurrentUser() user: AuthUser,
     @Query('status') status?: string,
+    @Query() query?: Record<string, unknown>,
   ) {
-    return this.viagensService.findAll(user, status);
+    return this.viagensService.findAll(user, status, parsePaginationQuery(query ?? {}));
   }
 
   @Get(':id')

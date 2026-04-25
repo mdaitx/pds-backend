@@ -14,6 +14,7 @@ import { CriarDespesaDto } from './dto/criar-despesa.dto';
 import { AtualizarDespesaDto } from './dto/atualizar-despesa.dto';
 import { NotificationEventsService } from '../notifications/notification-events.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { paginateResult, type PaginationOptions } from '../../common/pagination';
 
 const RECEIPT_REQUIRED_THRESHOLD = 100;
 
@@ -35,7 +36,7 @@ export class DespesasService {
   private async ensureCanAccessTrip(user: AuthUser, tripId: string): Promise<{ tripId: string; companyId: string }> {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
-      include: { driver: true },
+      select: { id: true, companyId: true, driverId: true },
     });
     if (!trip) {
       throw new NotFoundException('Viagem não encontrada');
@@ -73,21 +74,24 @@ export class DespesasService {
     }
   }
 
-  async findByTrip(user: AuthUser, tripId: string) {
+  async findByTrip(user: AuthUser, tripId: string, pagination: PaginationOptions = {}) {
     await this.ensureCanAccessTrip(user, tripId);
     const expenses = await this.prisma.expense.findMany({
       where: { tripId },
       include: {
         category: { select: { id: true, name: true, icon: true, color: true } },
       },
-      orderBy: { date: 'desc' },
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+      ...(pagination.limit ? { take: pagination.limit + 1 } : {}),
+      ...(pagination.cursor ? { cursor: { id: pagination.cursor }, skip: 1 } : {}),
     });
-    return expenses.map((e) => ({
+    const mapped = expenses.map((e) => ({
       ...e,
       amount: Number(e.amount),
       liters: e.liters != null ? Number(e.liters) : null,
       pricePerLiter: e.pricePerLiter != null ? Number(e.pricePerLiter) : null,
     }));
+    return pagination.limit ? paginateResult(mapped, pagination.limit) : mapped;
   }
 
   async create(user: AuthUser, dto: CriarDespesaDto) {

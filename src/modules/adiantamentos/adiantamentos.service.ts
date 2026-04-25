@@ -12,6 +12,7 @@ import type { AuthUser } from '../../core/auth/auth.service';
 import { CriarAdiantamentoDto } from './dto/criar-adiantamento.dto';
 import { AtualizarAdiantamentoDto } from './dto/atualizar-adiantamento.dto';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { paginateResult, type PaginationOptions } from '../../common/pagination';
 
 @Injectable()
 export class AdiantamentosService {
@@ -33,7 +34,7 @@ export class AdiantamentosService {
   ): Promise<{ tripId: string; companyId: string }> {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
-      include: { driver: true },
+      select: { id: true, companyId: true, driverId: true },
     });
     if (!trip) {
       throw new NotFoundException('Viagem não encontrada');
@@ -60,16 +61,19 @@ export class AdiantamentosService {
     throw new ForbiddenException('Acesso negado');
   }
 
-  async findByTrip(user: AuthUser, tripId: string) {
+  async findByTrip(user: AuthUser, tripId: string, pagination: PaginationOptions = {}) {
     await this.ensureCanAccessTrip(user, tripId);
     const advances = await this.prisma.advance.findMany({
       where: { tripId },
-      orderBy: { date: 'desc' },
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+      ...(pagination.limit ? { take: pagination.limit + 1 } : {}),
+      ...(pagination.cursor ? { cursor: { id: pagination.cursor }, skip: 1 } : {}),
     });
-    return advances.map((a) => ({
+    const mapped = advances.map((a) => ({
       ...a,
       amount: Number(a.amount),
     }));
+    return pagination.limit ? paginateResult(mapped, pagination.limit) : mapped;
   }
 
   async findByDriver(user: AuthUser, driverId: string) {

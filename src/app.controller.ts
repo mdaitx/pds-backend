@@ -17,4 +17,10 @@ export class AppController {
   getHealth() {
     return this.appService.getHealth();
   }
+
+  /** GET /health/ready - verifica dependências essenciais, como banco de dados. */
+  @Get('health/ready')
+  getReadiness() {
+    return this.appService.getReadiness();
+  }
 }

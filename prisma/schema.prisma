@@ -199,6 +199,7 @@ model Driver {
   trips              Trip[]
 
   @@index([companyId])
+  @@index([companyId, email])
   @@map("motoristas")
 }
 
@@ -238,6 +239,9 @@ model Trip {
   advances   Advance[]
   settlement Settlement?
 
+  @@index([companyId, startDate])
+  @@index([companyId, status, startDate])
+  @@index([driverId, startDate])
   @@map("viagens")
 }
 
@@ -273,6 +277,9 @@ model Expense {
   category ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   createdBy User?          @relation("ExpenseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
+  @@index([tripId, date])
+  @@index([categoryId, date])
+  @@index([createdById])
   @@map("despesas")
 }
 
@@ -292,6 +299,7 @@ model Advance {
 
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
+  @@index([tripId, date])
   @@map("adiantamentos")
 }
 

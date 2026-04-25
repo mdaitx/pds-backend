@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -24,6 +25,7 @@ import { AtualizarDespesaDto } from './dto/atualizar-despesa.dto';
 import { SupabaseService } from '../../core/supabase/supabase.service';
 import { BadRequestException } from '@nestjs/common';
 import { UPLOAD_MAX_FILE_BYTES } from '../../common/constants/upload-limits';
+import { parsePaginationQuery } from '../../common/pagination';
 
 const BUCKET = 'uploads';
 const EXPENSE_PREFIX = 'expense-receipts';
@@ -41,8 +43,12 @@ export class DespesasController {
   ) {}
 
   @Get('trip/:tripId')
-  async findByTrip(@CurrentUser() user: AuthUser, @Param('tripId') tripId: string) {
-    return this.despesasService.findByTrip(user, tripId);
+  async findByTrip(
+    @CurrentUser() user: AuthUser,
+    @Param('tripId') tripId: string,
+    @Query() query?: Record<string, unknown>,
+  ) {
+    return this.despesasService.findByTrip(user, tripId, parsePaginationQuery(query ?? {}));
   }
 
   @Post('upload')
