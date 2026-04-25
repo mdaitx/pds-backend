@@ -166,19 +166,22 @@ export class DashboardService {
     const monthStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
     const monthEnd = endOfDay(now);
 
-    const trips = await this.prisma.trip.findMany({
-      where: { driverId: driver.id },
-      include: tripInclude,
-      orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
-    });
-    const completedMonthTripIds = trips
-      .filter((trip) => trip.status === TripStatus.COMPLETED && inRange(trip.startDate, monthStart, monthEnd))
-      .map((trip) => trip.id);
-
-    const [settlements, advances] = await Promise.all([
-      completedMonthTripIds.length
-        ? this.prisma.settlement.findMany({ where: { tripId: { in: completedMonthTripIds } } })
-        : [],
+    const [recentTrips, completedMonthTrips, advances] = await Promise.all([
+      this.prisma.trip.findMany({
+        where: { driverId: driver.id },
+        include: tripInclude,
+        orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+        take: 50,
+      }),
+      this.prisma.trip.findMany({
+        where: {
+          driverId: driver.id,
+          status: TripStatus.COMPLETED,
+          startDate: { gte: monthStart, lte: monthEnd },
+        },
+        include: tripInclude,
+        orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+      }),
       this.prisma.advance.findMany({
         where: { trip: { driverId: driver.id } },
         include: { trip: { select: { code: true } } },
@@ -186,10 +189,18 @@ export class DashboardService {
         take: 8,
       }),
     ]);
+    const completedMonthTripIds = completedMonthTrips.map((trip) => trip.id);
+    const tripsById = new Map([...recentTrips, ...completedMonthTrips].map((trip) => [trip.id, trip]));
+
+    const settlements = await (
+      completedMonthTripIds.length
+        ? this.prisma.settlement.findMany({ where: { tripId: { in: completedMonthTripIds } } })
+        : Promise.resolve([])
+    );
 
     return {
       role: user.role,
-      trips: trips.map((trip) => ({
+      trips: Array.from(tripsById.values()).map((trip) => ({
         ...trip,
         freightValue: trip.freightValue != null ? Number(trip.freightValue) : null,
       })),
