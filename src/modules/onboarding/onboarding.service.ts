@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Role, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import type { AuthUser } from '../../core/auth/auth.service';
 import {
@@ -13,6 +13,7 @@ import {
   CreateOnboardingFirstDriverDto,
 } from './dto/onboarding.dto';
 import { Decimal } from '@prisma/client/runtime/library';
+import { SubscriptionService, TRIAL_DAYS } from '../subscription/subscription.service';
 
 export interface OnboardingStatus {
   completed: boolean;
@@ -30,7 +31,10 @@ export interface OnboardingStatus {
  */
 @Injectable()
 export class OnboardingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscription: SubscriptionService,
+  ) {}
 
   /**
    * Retorna o status do onboarding para o dono. Se não for OWNER, retorna completed=true
@@ -117,6 +121,9 @@ export class OnboardingService {
       throw new ConflictException('Empresa já cadastrada para este usuário');
     }
 
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DAYS);
+
     return this.prisma.company.create({
       data: {
         name: dto.name,
@@ -126,6 +133,8 @@ export class OnboardingService {
         email: dto.email ?? undefined,
         defaultCommission: dto.defaultCommission != null ? new Decimal(dto.defaultCommission) : undefined,
         ownerId: user.id,
+        trialEndsAt,
+        subscriptionStatus: SubscriptionStatus.TRIAL,
       },
     });
   }
@@ -145,6 +154,7 @@ export class OnboardingService {
     if (!company) {
       throw new BadRequestException('Cadastre a empresa antes do veículo');
     }
+    await this.subscription.assertCanAddVehicle(company.id);
 
     const plate = dto.plate.replace(/\s/g, '').toUpperCase();
     const existing = await this.prisma.vehicle.findFirst({
@@ -181,6 +191,7 @@ export class OnboardingService {
     if (!company) {
       throw new BadRequestException('Cadastre a empresa antes do motorista');
     }
+    await this.subscription.assertOperationalAccess(company.id);
 
     const cpfClean = dto.cpf.replace(/\D/g, '');
     const existing = await this.prisma.driver.findFirst({

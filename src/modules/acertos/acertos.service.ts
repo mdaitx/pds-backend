@@ -11,6 +11,7 @@ import { CompanyAccessService } from '../../core/company-access/company-access.s
 import { DriverAuthService } from '../../core/driver-auth/driver-auth.service';
 import type { AuthUser } from '../../shared/domain/auth-user.interface';
 import { NotificationEventsService } from '../notifications/notification-events.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 @Injectable()
 export class AcertosService {
@@ -19,6 +20,7 @@ export class AcertosService {
     private readonly companyAccess: CompanyAccessService,
     private readonly driverAuth: DriverAuthService,
     private readonly notificationEvents: NotificationEventsService,
+    private readonly subscription: SubscriptionService,
   ) {}
 
   private async ensureCanAccessTrip(user: AuthUser, tripId: string) {
@@ -52,6 +54,7 @@ export class AcertosService {
 
   async finalize(user: AuthUser, tripId: string, finalKm?: number) {
     const companyId = await this.companyAccess.resolveCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
       include: {
@@ -177,6 +180,7 @@ export class AcertosService {
 
   async markAsPaid(user: AuthUser, tripId: string) {
     const companyId = await this.companyAccess.resolveCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const settlement = await this.prisma.settlement.findUnique({
       where: { tripId },
       include: { trip: { select: { companyId: true } } },

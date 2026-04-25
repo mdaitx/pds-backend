@@ -13,6 +13,7 @@ import type { AuthUser } from '../../core/auth/auth.service';
 import { CriarDespesaDto } from './dto/criar-despesa.dto';
 import { AtualizarDespesaDto } from './dto/atualizar-despesa.dto';
 import { NotificationEventsService } from '../notifications/notification-events.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 const RECEIPT_REQUIRED_THRESHOLD = 100;
 
@@ -23,6 +24,7 @@ export class DespesasService {
     private readonly companyAccess: CompanyAccessService,
     private readonly driverAuth: DriverAuthService,
     private readonly notificationEvents: NotificationEventsService,
+    private readonly subscription: SubscriptionService,
   ) {}
 
   /**
@@ -90,6 +92,7 @@ export class DespesasService {
 
   async create(user: AuthUser, dto: CriarDespesaDto) {
     const { tripId, companyId } = await this.ensureCanAccessTrip(user, dto.tripId);
+    await this.subscription.assertOperationalAccess(companyId);
     await this.ensureCategoryValid(dto.categoryId, companyId);
 
     if (dto.amount > RECEIPT_REQUIRED_THRESHOLD && !dto.receiptUrl?.trim()) {
@@ -135,7 +138,8 @@ export class DespesasService {
     if (!expense) {
       throw new NotFoundException('Despesa não encontrada');
     }
-    await this.ensureCanAccessTrip(user, expense.tripId);
+    const { companyId } = await this.ensureCanAccessTrip(user, expense.tripId);
+    await this.subscription.assertOperationalAccess(companyId);
 
     if (dto.categoryId) {
       await this.ensureCategoryValid(dto.categoryId, expense.trip.companyId);
@@ -182,7 +186,8 @@ export class DespesasService {
     if (!expense) {
       throw new NotFoundException('Despesa não encontrada');
     }
-    await this.ensureCanAccessTrip(user, expense.tripId);
+    const { companyId } = await this.ensureCanAccessTrip(user, expense.tripId);
+    await this.subscription.assertOperationalAccess(companyId);
     await this.prisma.expense.delete({ where: { id } });
     return { success: true };
   }

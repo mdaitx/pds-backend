@@ -13,7 +13,7 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.useGlobalFilters(new HttpExceptionFilter());
 
@@ -61,7 +61,7 @@ async function bootstrap() {
     });
   }
 
-  const port = process.env.PORT ?? 4000;
+  const port = process.env.PORT ?? 4001;
   await app.listen(port);
   console.log(`Backend running at http://localhost:${port}`);
   if (swaggerEnabled) {

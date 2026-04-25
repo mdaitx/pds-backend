@@ -22,12 +22,14 @@ import { CompanyAccessModule } from './core/company-access/company-access.module
 import { CompanyUsersModule } from './modules/company-users/company-users.module';
 import { MailModule } from './core/mail/mail.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SubscriptionModule } from './modules/subscription/subscription.module';
 
 @Module({
   imports: [
     PrismaModule,
     MailModule,
     NotificationsModule,
+    SubscriptionModule,
     SupabaseModule,
     CompanyAccessModule,
     AuthModule,

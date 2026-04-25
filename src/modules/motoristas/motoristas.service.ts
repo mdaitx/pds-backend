@@ -12,12 +12,14 @@ import { CompanyAccessService } from '../../core/company-access/company-access.s
 import type { AuthUser } from '../../core/auth/auth.service';
 import { CriarMotoristaDto } from './dto/criar-motorista.dto';
 import { AtualizarMotoristaDto } from './dto/atualizar-motorista.dto';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 @Injectable()
 export class MotoristasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly companyAccess: CompanyAccessService,
+    private readonly subscription: SubscriptionService,
   ) {}
 
   private async getCompanyId(user: AuthUser): Promise<string> {
@@ -83,6 +85,7 @@ export class MotoristasService {
 
   async create(user: AuthUser, dto: CriarMotoristaDto) {
     const companyId = await this.getCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const cpfClean = (dto.cpf ?? '').replace(/\D/g, '');
     if (cpfClean.length > 0 && cpfClean.length !== 11) {
       throw new BadRequestException('CPF deve ter 11 dígitos quando informado');
@@ -141,6 +144,7 @@ export class MotoristasService {
 
   async update(user: AuthUser, id: string, dto: AtualizarMotoristaDto) {
     const companyId = await this.getCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const driver = await this.prisma.driver.findFirst({
       where: { id, companyId },
     });
@@ -218,6 +222,7 @@ export class MotoristasService {
 
   async remove(user: AuthUser, id: string) {
     const companyId = await this.getCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const driver = await this.prisma.driver.findFirst({
       where: { id, companyId },
     });

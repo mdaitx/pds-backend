@@ -56,6 +56,17 @@ enum CommissionCalculationMethod {
   @@map("commission_calculation_method")
 }
 
+/// Assinatura / trial (task 18: plano por veículo, gateway Stripe).
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+
+  @@map("subscription_status")
+}
+
 // -----------------------------------------------------------------------------
 // Empresa: dados cadastrais do dono; uma empresa por usuário OWNER.
 // -----------------------------------------------------------------------------
@@ -70,6 +81,14 @@ model Company {
   /// IANA tz database (ex.: America/Sao_Paulo), para exibição e relatórios futuros
   timezone              String?                       @map("timezone") @db.VarChar(64)
   commissionMethod      CommissionCalculationMethod   @default(GROSS_PROFIT) @map("commission_method")
+  /// Situação da assinatura (trial 30d / Stripe).
+  subscriptionStatus   SubscriptionStatus            @default(TRIAL) @map("subscription_status")
+  /// Fim do trial (30 dias a partir do cadastro da empresa no onboarding).
+  trialEndsAt          DateTime?                       @map("trial_ends_at")
+  /// Fim do período pago atual (renovação mensal).
+  currentPeriodEnd     DateTime?                       @map("current_period_end")
+  stripeCustomerId     String?                         @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?                         @unique @map("stripe_subscription_id")
   ownerId          String   @unique @map("owner_id")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")

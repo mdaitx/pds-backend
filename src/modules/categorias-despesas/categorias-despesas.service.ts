@@ -11,6 +11,7 @@ import { CompanyAccessService } from '../../core/company-access/company-access.s
 import type { AuthUser } from '../../core/auth/auth.service';
 import { CriarCategoriaDespesaDto } from './dto/criar-categoria-despesa.dto';
 import { AtualizarCategoriaDespesaDto } from './dto/atualizar-categoria-despesa.dto';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 /**
  * Serviço de categorias de despesas: lista categorias do sistema (companyId null) e
@@ -21,6 +22,7 @@ export class CategoriasDespesasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly companyAccess: CompanyAccessService,
+    private readonly subscription: SubscriptionService,
   ) {}
 
   async findAll(user: AuthUser) {
@@ -72,6 +74,7 @@ export class CategoriasDespesasService {
       throw new ForbiddenException('Apenas o dono da frota pode criar categorias customizadas');
     }
     const companyId = await this.companyAccess.resolveCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const nameNorm = dto.name.trim();
     const existing = await this.prisma.expenseCategory.findUnique({
       where: {
@@ -103,6 +106,7 @@ export class CategoriasDespesasService {
       throw new ForbiddenException('Apenas o dono da frota pode editar categorias');
     }
     const companyId = await this.companyAccess.resolveCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const category = await this.prisma.expenseCategory.findFirst({
       where: { id, companyId },
     });
@@ -144,6 +148,7 @@ export class CategoriasDespesasService {
       throw new ForbiddenException('Apenas o dono da frota pode excluir categorias');
     }
     const companyId = await this.companyAccess.resolveCompanyId(user);
+    await this.subscription.assertOperationalAccess(companyId);
     const category = await this.prisma.expenseCategory.findFirst({
       where: { id, companyId },
     });

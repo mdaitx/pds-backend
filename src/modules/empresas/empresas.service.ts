@@ -39,6 +39,9 @@ export class EmpresasService {
     return {
       ...company,
       defaultCommission: company.defaultCommission ? Number(company.defaultCommission) : null,
+      subscriptionStatus: company.subscriptionStatus,
+      trialEndsAt: company.trialEndsAt ? company.trialEndsAt.toISOString() : null,
+      currentPeriodEnd: company.currentPeriodEnd ? company.currentPeriodEnd.toISOString() : null,
     };
   }
 
@@ -69,6 +72,9 @@ export class EmpresasService {
     return {
       ...updated,
       defaultCommission: updated.defaultCommission ? Number(updated.defaultCommission) : null,
+      subscriptionStatus: updated.subscriptionStatus,
+      trialEndsAt: updated.trialEndsAt ? updated.trialEndsAt.toISOString() : null,
+      currentPeriodEnd: updated.currentPeriodEnd ? updated.currentPeriodEnd.toISOString() : null,
     };
   }
 }
