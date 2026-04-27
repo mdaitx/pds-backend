@@ -1,5 +1,5 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
-import { TripStatus, Role } from '@prisma/client';
+import { Prisma, TripStatus, Role } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../../../core/prisma/prisma.service';
 import { CompanyAccessService } from '../../../../core/company-access/company-access.service';
@@ -11,12 +11,55 @@ import type {
   CriarViagemInput,
   AtualizarViagemInput,
   ViagemComRelacoes,
+  ListTripsPageInput,
+  TripsListResult,
 } from '../../domain/ports/viagem.repository.port';
 
 const tripRelationsSelect = {
   vehicle: { select: { id: true, plate: true, brand: true, model: true, vehicleType: true } },
   driver: { select: { id: true, name: true } },
 } as const;
+
+const STATUS_COUNT_KEYS: TripStatus[] = [
+  'PENDING',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'CANCELLED',
+];
+
+function emptyByStatusRecord(): Record<TripStatus, number> {
+  return {
+    PENDING: 0,
+    IN_PROGRESS: 0,
+    COMPLETED: 0,
+    CANCELLED: 0,
+  };
+}
+
+function textSearchOr(q: string): Prisma.TripWhereInput {
+  const s = q.trim();
+  if (!s) return {};
+  return {
+    OR: [
+      { code: { contains: s, mode: 'insensitive' } },
+      { clientName: { contains: s, mode: 'insensitive' } },
+      { origin: { contains: s, mode: 'insensitive' } },
+      { destination: { contains: s, mode: 'insensitive' } },
+      { loadType: { contains: s, mode: 'insensitive' } },
+      { notes: { contains: s, mode: 'insensitive' } },
+      { driver: { name: { contains: s, mode: 'insensitive' } } },
+      {
+        vehicle: {
+          OR: [
+            { plate: { contains: s, mode: 'insensitive' } },
+            { brand: { contains: s, mode: 'insensitive' } },
+            { model: { contains: s, mode: 'insensitive' } },
+          ],
+        },
+      },
+    ],
+  };
+}
 
 function toViagemComRelacoes(trip: {
   id: string;
@@ -110,6 +153,76 @@ export class ViagemPrismaRepository implements IViagemRepository {
     });
     const mapped = list.map(toViagemComRelacoes);
     return pagination?.limit ? paginateResult(mapped, pagination.limit) : mapped;
+  }
+
+  private async resolveScopeWhere(user: AuthUser): Promise<Prisma.TripWhereInput | null> {
+    if (user.role === Role.DRIVER) {
+      const ctx = await this.driverAuth.findDriverForAuthUser(user);
+      if (!ctx) return null;
+      return { driverId: ctx.id };
+    }
+    if (user.role === Role.OWNER || user.role === Role.ADMIN) {
+      return { companyId: await this.companyAccess.resolveCompanyId(user) };
+    }
+    return null;
+  }
+
+  async findListPage(user: AuthUser, input: ListTripsPageInput): Promise<TripsListResult> {
+    const scope = await this.resolveScopeWhere(user);
+    if (!scope) {
+      return {
+        items: [],
+        total: 0,
+        page: input.page,
+        pageSize: input.pageSize,
+        totalPages: 1,
+        counts: { all: 0, byStatus: emptyByStatusRecord() },
+      };
+    }
+    const q = input.search?.trim();
+    const searchClause = q ? textSearchOr(q) : null;
+    const andList: Prisma.TripWhereInput[] = [scope, ...(searchClause ? [searchClause] : [])];
+    if (input.status) andList.push({ status: input.status });
+    const whereList: Prisma.TripWhereInput = andList.length === 1 ? andList[0]! : { AND: andList };
+
+    const andCounts: Prisma.TripWhereInput[] = [scope, ...(searchClause ? [searchClause] : [])];
+    const whereCounts: Prisma.TripWhereInput = andCounts.length === 1 ? andCounts[0]! : { AND: andCounts };
+
+    const skip = (input.page - 1) * input.pageSize;
+    const [rows, total, groupRows, allCount] = await Promise.all([
+      this.prisma.trip.findMany({
+        where: whereList,
+        include: tripRelationsSelect,
+        orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+        skip,
+        take: input.pageSize,
+      }),
+      this.prisma.trip.count({ where: whereList }),
+      this.prisma.trip.groupBy({
+        by: ['status'],
+        where: whereCounts,
+        _count: { _all: true },
+      }),
+      this.prisma.trip.count({ where: whereCounts }),
+    ]);
+
+    const byStatus = emptyByStatusRecord();
+    for (const g of groupRows) {
+      if (STATUS_COUNT_KEYS.includes(g.status)) {
+        byStatus[g.status] = g._count._all;
+      }
+    }
+
+    const totalPages = Math.max(1, Math.ceil(Math.max(0, total) / input.pageSize));
+
+    return {
+      items: rows.map(toViagemComRelacoes),
+      total,
+      page: input.page,
+      pageSize: input.pageSize,
+      totalPages,
+      counts: { all: allCount, byStatus },
+    };
   }
 
   async findById(user: AuthUser, id: string): Promise<ViagemComRelacoes | null> {

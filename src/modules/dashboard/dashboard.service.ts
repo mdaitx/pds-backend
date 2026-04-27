@@ -75,12 +75,42 @@ export class DashboardService {
     throw new ForbiddenException('Acesso negado');
   }
 
+  async charts(user: AuthUser) {
+    if (user.role !== Role.OWNER && user.role !== Role.ADMIN) {
+      throw new ForbiddenException('Acesso negado');
+    }
+
+    const companyId = await this.companyAccess.resolveCompanyId(user);
+    const now = new Date();
+    const oneYearStart = startOfDay(addMonths(now, -11));
+
+    const [tripsForCharts, expensesForCharts] = await Promise.all([
+      this.prisma.trip.findMany({
+        where: { companyId, startDate: { gte: oneYearStart } },
+        select: { id: true, startDate: true, status: true, freightValue: true },
+      }),
+      this.prisma.expense.findMany({
+        where: { trip: { companyId }, date: { gte: oneYearStart } },
+        select: {
+          id: true,
+          date: true,
+          amount: true,
+          category: { select: { name: true, color: true } },
+        },
+      }),
+    ]);
+
+    return {
+      chartDataByPeriod: this.buildChartDataByPeriod(tripsForCharts, expensesForCharts),
+      categoryBarsByPeriod: this.buildCategoryBarsByPeriod(expensesForCharts),
+    };
+  }
+
   private async ownerSummary(user: AuthUser) {
     const companyId = await this.companyAccess.resolveCompanyId(user);
     const now = new Date();
     const monthStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
     const nextMonthStart = startOfDay(new Date(now.getFullYear(), now.getMonth() + 1, 1));
-    const oneYearStart = startOfDay(addMonths(now, -11));
 
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
@@ -89,8 +119,8 @@ export class DashboardService {
 
     const [
       recentTrips,
-      tripsForCharts,
-      expensesForCharts,
+      monthCompletedTrips,
+      monthExpenses,
       monthTripsCount,
       totalTripsCount,
       vehiclesCount,
@@ -105,17 +135,16 @@ export class DashboardService {
         take: 10,
       }),
       this.prisma.trip.findMany({
-        where: { companyId, startDate: { gte: oneYearStart } },
-        select: { id: true, startDate: true, status: true, freightValue: true },
+        where: {
+          companyId,
+          status: TripStatus.COMPLETED,
+          startDate: { gte: monthStart, lt: nextMonthStart },
+        },
+        select: { id: true, freightValue: true },
       }),
       this.prisma.expense.findMany({
-        where: { trip: { companyId }, date: { gte: oneYearStart } },
-        select: {
-          id: true,
-          date: true,
-          amount: true,
-          category: { select: { name: true, color: true } },
-        },
+        where: { trip: { companyId }, date: { gte: monthStart, lt: nextMonthStart } },
+        select: { id: true, amount: true },
       }),
       this.prisma.trip.count({ where: { companyId, startDate: { gte: monthStart, lt: nextMonthStart } } }),
       this.prisma.trip.count({ where: { companyId } }),
@@ -127,14 +156,8 @@ export class DashboardService {
       this.prisma.trip.count({ where: { companyId, status: TripStatus.IN_PROGRESS } }),
     ]);
 
-    const chartDataByPeriod = this.buildChartDataByPeriod(tripsForCharts, expensesForCharts);
-    const categoryBarsByPeriod = this.buildCategoryBarsByPeriod(expensesForCharts);
-    const totalFaturamento = tripsForCharts
-      .filter((trip) => trip.status === TripStatus.COMPLETED && inRange(trip.startDate, monthStart, endOfDay(now)))
-      .reduce((sum, trip) => sum + Number(trip.freightValue ?? 0), 0);
-    const totalDespesasMes = expensesForCharts
-      .filter((expense) => inRange(expense.date, monthStart, endOfDay(now)))
-      .reduce((sum, expense) => sum + Number(expense.amount), 0);
+    const totalFaturamento = monthCompletedTrips.reduce((sum, trip) => sum + Number(trip.freightValue ?? 0), 0);
+    const totalDespesasMes = monthExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
 
     return {
       role: user.role,
@@ -151,8 +174,6 @@ export class DashboardService {
         ...trip,
         freightValue: trip.freightValue != null ? Number(trip.freightValue) : null,
       })),
-      chartDataByPeriod,
-      categoryBarsByPeriod,
     };
   }
 

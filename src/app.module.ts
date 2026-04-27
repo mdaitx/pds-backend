@@ -24,6 +24,7 @@ import { MailModule } from './core/mail/mail.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     AcertosModule,
     CompanyUsersModule,
     DashboardModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

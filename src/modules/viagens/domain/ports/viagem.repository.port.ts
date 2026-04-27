@@ -2,6 +2,26 @@ import { TripStatus } from '@prisma/client';
 import type { PaginatedResult, PaginationOptions } from '../../../../common/pagination';
 import type { AuthUser } from '../../../../shared/domain/auth-user.interface';
 
+/** Listagem com offset, totais e contadores para abas (mesma busca, sem filtro de status) */
+export type ListTripsPageInput = {
+  status?: TripStatus;
+  search?: string;
+  page: number;
+  pageSize: number;
+};
+
+export type TripsListResult = {
+  items: ViagemComRelacoes[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  counts: {
+    all: number;
+    byStatus: Record<TripStatus, number>;
+  };
+};
+
 /** Dados para criar uma viagem (camada de aplicação) */
 export interface CriarViagemInput {
   vehicleId: string;
@@ -69,6 +89,7 @@ export interface IViagemRepository {
     status: TripStatus | undefined,
     pagination: Required<Pick<PaginationOptions, 'limit'>> & Pick<PaginationOptions, 'cursor'>,
   ): Promise<PaginatedResult<ViagemComRelacoes>>;
+  findListPage(user: AuthUser, input: ListTripsPageInput): Promise<TripsListResult>;
   findById(user: AuthUser, id: string): Promise<ViagemComRelacoes | null>;
   create(companyId: string, data: CriarViagemInput): Promise<ViagemComRelacoes>;
   update(id: string, companyId: string, data: AtualizarViagemInput): Promise<ViagemComRelacoes>;

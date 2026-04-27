@@ -34,9 +34,16 @@ export class ViagensController {
   async findAll(
     @CurrentUser() user: AuthUser,
     @Query('status') status?: string,
+    @Query('q') q?: string,
     @Query() query?: Record<string, unknown>,
   ) {
-    return this.viagensService.findAll(user, status, parsePaginationQuery(query ?? {}));
+    const search = typeof q === 'string' ? q.trim() : undefined;
+    return this.viagensService.findAll(
+      user,
+      status,
+      parsePaginationQuery(query ?? {}),
+      search || undefined,
+    );
   }
 
   @Get(':id')
