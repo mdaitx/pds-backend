@@ -20,4 +20,10 @@ export class DashboardController {
   summary(@CurrentUser() user: AuthUser) {
     return this.dashboardService.summary(user);
   }
+
+  @Get('charts')
+  @Roles(Role.OWNER, Role.ADMIN)
+  charts(@CurrentUser() user: AuthUser) {
+    return this.dashboardService.charts(user);
+  }
 }
