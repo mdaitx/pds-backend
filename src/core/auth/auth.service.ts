@@ -184,6 +184,15 @@ export class AuthService {
     };
   }
 
+  /** Remove entradas de cache para um usuário específico após mutações de perfil. */
+  private invalidateAuthCacheForUser(userId: string): void {
+    for (const [key, entry] of this.authCache.entries()) {
+      if (entry.user.id === userId) {
+        this.authCache.delete(key);
+      }
+    }
+  }
+
   /** Atualiza dados do próprio usuário (ex.: remover foto enviando photoUrl null). */
   async updateMyProfile(user: AuthUser, dto: UpdateProfileDto): Promise<AuthUser> {
     const data: { photoUrl?: string | null } = {};
@@ -198,6 +207,7 @@ export class AuthService {
       where: { id: user.id },
       data,
     });
+    this.invalidateAuthCacheForUser(user.id);
     return this.toAuthUser(updated);
   }
 
@@ -225,6 +235,7 @@ export class AuthService {
       where: { id: user.id },
       data: { photoUrl: publicUrl },
     });
+    this.invalidateAuthCacheForUser(user.id);
     return this.toAuthUser(updated);
   }
 
