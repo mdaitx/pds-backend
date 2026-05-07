@@ -20,6 +20,7 @@ import { parsePaginationQuery } from '../../../common/pagination';
 import type { AuthUser } from '../../../shared/domain/auth-user.interface';
 import { CriarViagemDto } from './dto/criar-viagem.dto';
 import { AtualizarViagemDto } from './dto/atualizar-viagem.dto';
+import { TripDeliveryReceiptDto } from './dto/trip-delivery-receipt.dto';
 
 @ApiTags('Viagens')
 @ApiBearerAuth('access-token')
@@ -53,6 +54,24 @@ export class ViagensController {
     return this.viagensService.findOne(user, id);
   }
 
+  @Post(':id/start')
+  @UseGuards(RolesGuard)
+  @Roles(Role.OWNER, Role.ADMIN, Role.DRIVER)
+  async start(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.viagensService.startTrip(user, id);
+  }
+
+  @Patch(':id/delivery-receipt')
+  @UseGuards(RolesGuard)
+  @Roles(Role.OWNER, Role.ADMIN, Role.DRIVER)
+  async setDeliveryReceipt(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: TripDeliveryReceiptDto,
+  ) {
+    return this.viagensService.setDeliveryReceipt(user, id, dto.url);
+  }
+
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.OWNER, Role.ADMIN)
@@ -70,6 +89,7 @@ export class ViagensController {
       loadType: dto.loadType,
       notes: dto.notes,
       status: dto.status,
+      displacementToLoad: dto.displacementToLoad,
     });
   }
 

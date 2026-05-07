@@ -228,6 +228,10 @@ model Trip {
   finalKm      Int?        @map("final_km") // km final ao concluir viagem
   loadType     String?     @map("load_type") // tipo de carga
   notes        String?     @db.Text
+  /// Comprovante de entrega (obrigatório para motorista finalizar a viagem).
+  deliveryReceiptUrl String? @map("delivery_receipt_url")
+  /// Viagem “vazia”: deslocamento até o ponto de carregamento (sem carga).
+  displacementToLoad Boolean @default(false) @map("displacement_to_load")
   status       TripStatus  @default(PENDING)
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")

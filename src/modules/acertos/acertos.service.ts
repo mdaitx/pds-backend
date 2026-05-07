@@ -48,8 +48,10 @@ export class AcertosService {
   }
 
   async finalize(user: AuthUser, tripId: string, finalKm?: number) {
-    const companyId = await this.companyAccess.resolveCompanyId(user);
+    const scope = await this.ensureCanAccessTrip(user, tripId);
+    const companyId = scope.companyId;
     await this.subscription.assertOperationalAccess(companyId);
+
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
       include: {
@@ -65,6 +67,32 @@ export class AcertosService {
     if (trip.companyId !== companyId) {
       throw new ForbiddenException('Viagem nao pertence a sua empresa');
     }
+
+    if (user.role === Role.DRIVER) {
+      if (trip.status !== TripStatus.IN_PROGRESS) {
+        throw new BadRequestException('Inicie a viagem antes de finalizar.');
+      }
+      if (!trip.displacementToLoad) {
+        const receipt = trip.deliveryReceiptUrl?.trim();
+        if (!receipt) {
+          throw new BadRequestException('Anexe o comprovante de entrega antes de finalizar a viagem.');
+        }
+      }
+    }
+
+    if (trip.displacementToLoad) {
+      await this.prisma.trip.update({
+        where: { id: tripId },
+        data: {
+          status: TripStatus.COMPLETED,
+          endDate: new Date(),
+          ...(finalKm != null && { finalKm }),
+        },
+      });
+      void this.notificationEvents.onDisplacementTripCompleted(tripId);
+      return { displacementCompleted: true as const, tripId };
+    }
+
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
     });

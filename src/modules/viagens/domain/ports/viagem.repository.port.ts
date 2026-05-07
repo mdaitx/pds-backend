@@ -36,6 +36,8 @@ export interface CriarViagemInput {
   loadType?: string;
   notes?: string;
   status?: TripStatus;
+  /** Deslocamento até o carregamento (viagem sem carga). */
+  displacementToLoad?: boolean;
 }
 
 /** Dados para atualizar uma viagem (parcial) */
@@ -52,6 +54,7 @@ export interface AtualizarViagemInput {
   loadType?: string;
   notes?: string;
   status?: TripStatus;
+  deliveryReceiptUrl?: string | null;
 }
 
 /** Representação da viagem retornada pela camada de persistência */
@@ -71,6 +74,8 @@ export interface ViagemComRelacoes {
   finalKm: number | null;
   loadType: string | null;
   notes: string | null;
+  deliveryReceiptUrl: string | null;
+  displacementToLoad: boolean;
   status: TripStatus;
   vehicle?: { id: string; plate: string; brand: string; model: string; vehicleType?: string };
   driver?: { id: string; name: string };

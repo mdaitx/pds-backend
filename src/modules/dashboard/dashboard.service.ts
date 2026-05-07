@@ -185,9 +185,11 @@ export class DashboardService {
 
     const now = new Date();
     const monthStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
-    const monthEnd = endOfDay(now);
+    /** Último instante do mês civil (alinha com o filtro por mês no app; evita cortar viagens com início após “hoje”). */
+    const monthEnd = endOfDay(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 
-    const [recentTrips, completedMonthTrips, advances] = await Promise.all([
+    /** Viagens concluídas neste mês civil (por `endDate`), para comissões, km e contagem. */
+    const [recentTrips, completedInMonthTrips, advances] = await Promise.all([
       this.prisma.trip.findMany({
         where: { driverId: driver.id },
         include: tripInclude,
@@ -198,10 +200,10 @@ export class DashboardService {
         where: {
           driverId: driver.id,
           status: TripStatus.COMPLETED,
-          startDate: { gte: monthStart, lte: monthEnd },
+          endDate: { not: null, gte: monthStart, lte: monthEnd },
         },
         include: tripInclude,
-        orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+        orderBy: [{ endDate: 'desc' }, { id: 'desc' }],
       }),
       this.prisma.advance.findMany({
         where: { trip: { driverId: driver.id } },
@@ -210,12 +212,17 @@ export class DashboardService {
         take: 8,
       }),
     ]);
-    const completedMonthTripIds = completedMonthTrips.map((trip) => trip.id);
-    const tripsById = new Map([...recentTrips, ...completedMonthTrips].map((trip) => [trip.id, trip]));
+    const completedInMonthTripIds = completedInMonthTrips.map((trip) => trip.id);
+    const recentCompletedTripIds = recentTrips
+      .filter((t) => t.status === TripStatus.COMPLETED)
+      .map((t) => t.id);
+    /** União: acertos para concluídas no mês + concluídas entre as 50 recentes. */
+    const settlementTripIds = [...new Set([...completedInMonthTripIds, ...recentCompletedTripIds])];
+    const tripsById = new Map([...recentTrips, ...completedInMonthTrips].map((trip) => [trip.id, trip]));
 
     const settlements = await (
-      completedMonthTripIds.length
-        ? this.prisma.settlement.findMany({ where: { tripId: { in: completedMonthTripIds } } })
+      settlementTripIds.length
+        ? this.prisma.settlement.findMany({ where: { tripId: { in: settlementTripIds } } })
         : Promise.resolve([])
     );
 
@@ -229,7 +236,8 @@ export class DashboardService {
         settlements.map((settlement) => [
           settlement.tripId,
           {
-            ...settlement,
+            id: settlement.id,
+            tripId: settlement.tripId,
             totalExpenses: Number(settlement.totalExpenses),
             grossProfit: Number(settlement.grossProfit),
             driverCommissionPct: Number(settlement.driverCommissionPct),
@@ -237,6 +245,11 @@ export class DashboardService {
             totalAdvances: Number(settlement.totalAdvances),
             amountToPayDriver: Number(settlement.amountToPayDriver),
             ownerResult: Number(settlement.ownerResult),
+            finalKm: settlement.finalKm != null ? Number(settlement.finalKm) : null,
+            paid: settlement.paid,
+            paidAt: settlement.paidAt,
+            createdAt: settlement.createdAt,
+            updatedAt: settlement.updatedAt,
           },
         ]),
       ),

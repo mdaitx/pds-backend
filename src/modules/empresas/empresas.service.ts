@@ -1,5 +1,5 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Role, type Company } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CompanyAccessService } from '../../core/company-access/company-access.service';
 import type { AuthUser } from '../../core/auth/auth.service';
@@ -16,6 +16,40 @@ export class EmpresasService {
     private readonly prisma: PrismaService,
     private readonly companyAccess: CompanyAccessService,
   ) {}
+
+  /** CNPJ de pessoa jurídica tem 14 dígitos; sem isso tratamos o cadastro como autônomo (CPF/nulo no documento ou incompleto). */
+  private hasCompanyCnpj(document: string | null | undefined): boolean {
+    const d = (document ?? '').replace(/\D/g, '');
+    return d.length === 14;
+  }
+
+  private async buildOwnerCompanyView(company: Company) {
+    const isAutonomous = !this.hasCompanyCnpj(company.document);
+    let autonomousDriver: {
+      id: string;
+      name: string;
+      cpf: string | null;
+      phone: string | null;
+      email: string | null;
+    } | null = null;
+    if (isAutonomous) {
+      const first = await this.prisma.driver.findFirst({
+        where: { companyId: company.id },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, name: true, cpf: true, phone: true, email: true },
+      });
+      if (first) autonomousDriver = first;
+    }
+    return {
+      ...company,
+      defaultCommission: company.defaultCommission ? Number(company.defaultCommission) : null,
+      subscriptionStatus: company.subscriptionStatus,
+      trialEndsAt: company.trialEndsAt ? company.trialEndsAt.toISOString() : null,
+      currentPeriodEnd: company.currentPeriodEnd ? company.currentPeriodEnd.toISOString() : null,
+      isAutonomous,
+      autonomousDriver,
+    };
+  }
 
   private async resolveCompanyRecordForOwner(user: AuthUser) {
     if (user.role !== Role.OWNER) {
@@ -36,13 +70,7 @@ export class EmpresasService {
    */
   async findMyCompany(user: AuthUser) {
     const company = await this.resolveCompanyRecordForOwner(user);
-    return {
-      ...company,
-      defaultCommission: company.defaultCommission ? Number(company.defaultCommission) : null,
-      subscriptionStatus: company.subscriptionStatus,
-      trialEndsAt: company.trialEndsAt ? company.trialEndsAt.toISOString() : null,
-      currentPeriodEnd: company.currentPeriodEnd ? company.currentPeriodEnd.toISOString() : null,
-    };
+    return this.buildOwnerCompanyView(company);
   }
 
   /**
@@ -69,12 +97,6 @@ export class EmpresasService {
         }),
       },
     });
-    return {
-      ...updated,
-      defaultCommission: updated.defaultCommission ? Number(updated.defaultCommission) : null,
-      subscriptionStatus: updated.subscriptionStatus,
-      trialEndsAt: updated.trialEndsAt ? updated.trialEndsAt.toISOString() : null,
-      currentPeriodEnd: updated.currentPeriodEnd ? updated.currentPeriodEnd.toISOString() : null,
-    };
+    return this.buildOwnerCompanyView(updated);
   }
 }
