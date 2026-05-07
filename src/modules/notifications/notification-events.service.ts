@@ -109,6 +109,38 @@ export class NotificationEventsService {
     }
   }
 
+  /** Deslocamento: viagem concluída sem registro de acerto financeiro. */
+  async onDisplacementTripCompleted(tripId: string): Promise<void> {
+    try {
+      const trip = await this.prisma.trip.findUnique({
+        where: { id: tripId },
+        include: {
+          driver: { select: { name: true, email: true } },
+        },
+      });
+      if (!trip?.displacementToLoad) return;
+      const link = `${this.baseUrl()}/dashboard/viagens/${trip.id}`;
+      const toDriver = trip.driver.email?.trim();
+      if (toDriver) {
+        await this.mail.sendMail({
+          to: toDriver,
+          subject: `[Truck Finanças] Deslocamento ${trip.code} concluído`,
+          text: `Olá, ${trip.driver.name}.\n\nA viagem de deslocamento ${trip.code} foi finalizada. Este trecho não gera acerto de frete nem comissão.\n\nAbra o app: ${link}\n`,
+        });
+      }
+      const managers = await this.fleetManagerEmails(trip.companyId);
+      if (managers.length > 0) {
+        await this.mail.sendMail({
+          to: managers,
+          subject: `[Truck Finanças] Deslocamento ${trip.code} concluído`,
+          text: `A viagem de deslocamento ${trip.code} foi finalizada pelo motorista ou pela frota.\nNão há acerto financeiro para este trecho.\n${link}\n`,
+        });
+      }
+    } catch (e) {
+      this.logger.error(`onDisplacementTripCompleted: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
   async onTripFinalized(tripId: string): Promise<void> {
     try {
       const settlement = await this.prisma.settlement.findUnique({

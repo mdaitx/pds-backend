@@ -8,6 +8,7 @@ import {
   IsNumber,
   IsEnum,
   MaxLength,
+  IsBoolean,
 } from 'class-validator';
 import { TripStatus } from '@prisma/client';
 
@@ -74,4 +75,11 @@ export class CriarViagemDto {
   @IsEnum(TripStatus)
   @IsOptional()
   status?: TripStatus;
+
+  @ApiPropertyOptional({
+    description: 'Viagem de deslocamento até o carregamento (sem carga / “viagem vazia”)',
+  })
+  @IsBoolean()
+  @IsOptional()
+  displacementToLoad?: boolean;
 }

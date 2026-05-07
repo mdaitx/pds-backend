@@ -88,6 +88,34 @@ export class ViagensService {
     return trip;
   }
 
+  async startTrip(user: AuthUser, id: string) {
+    const trip = await this.viagemRepository.findById(user, id);
+    if (!trip) {
+      throw new NotFoundException('Viagem não encontrada');
+    }
+    await this.subscription.assertOperationalAccess(trip.companyId);
+    if (trip.status !== TripStatus.PENDING) {
+      throw new BadRequestException('Só é possível iniciar viagens em “Aguardando”.');
+    }
+    return this.viagemRepository.update(id, trip.companyId, { status: TripStatus.IN_PROGRESS });
+  }
+
+  async setDeliveryReceipt(user: AuthUser, id: string, url: string) {
+    const trimmed = url.trim();
+    if (!trimmed) {
+      throw new BadRequestException('Informe a URL do comprovante de entrega.');
+    }
+    const trip = await this.viagemRepository.findById(user, id);
+    if (!trip) {
+      throw new NotFoundException('Viagem não encontrada');
+    }
+    if (trip.status === TripStatus.COMPLETED || trip.status === TripStatus.CANCELLED) {
+      throw new BadRequestException('Não é possível alterar o comprovante neste status da viagem.');
+    }
+    await this.subscription.assertOperationalAccess(trip.companyId);
+    return this.viagemRepository.update(id, trip.companyId, { deliveryReceiptUrl: trimmed });
+  }
+
   async create(user: AuthUser, dto: CriarViagemInput) {
     const companyId = await this.getCompanyId(user);
     await this.subscription.assertOperationalAccess(companyId);

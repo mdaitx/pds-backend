@@ -25,7 +25,7 @@ export class AcertosController {
 
   @Post('finalize/:tripId')
   @UseGuards(RolesGuard)
-  @Roles(Role.OWNER, Role.ADMIN)
+  @Roles(Role.OWNER, Role.ADMIN, Role.DRIVER)
   async finalize(
     @CurrentUser() user: AuthUser,
     @Param('tripId') tripId: string,

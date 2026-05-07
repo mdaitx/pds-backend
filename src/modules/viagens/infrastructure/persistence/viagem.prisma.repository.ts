@@ -77,6 +77,8 @@ function toViagemComRelacoes(trip: {
   finalKm: number | null;
   loadType: string | null;
   notes: string | null;
+  deliveryReceiptUrl?: string | null;
+  displacementToLoad?: boolean;
   status: TripStatus;
   vehicle?: { id: string; plate: string; brand: string; model: string; vehicleType?: string };
   driver?: { id: string; name: string };
@@ -84,6 +86,8 @@ function toViagemComRelacoes(trip: {
   return {
     ...trip,
     freightValue: trip.freightValue != null ? Number(trip.freightValue) : null,
+    deliveryReceiptUrl: trip.deliveryReceiptUrl ?? null,
+    displacementToLoad: trip.displacementToLoad ?? false,
   };
 }
 
@@ -263,6 +267,7 @@ export class ViagemPrismaRepository implements IViagemRepository {
         initialKm: data.initialKm,
         loadType: data.loadType?.trim() || undefined,
         notes: data.notes?.trim() || undefined,
+        displacementToLoad: data.displacementToLoad ?? false,
         status: data.status ?? 'PENDING',
       },
       include: {
@@ -292,6 +297,9 @@ export class ViagemPrismaRepository implements IViagemRepository {
         ...(data.initialKm !== undefined && { initialKm: data.initialKm }),
         ...(data.loadType !== undefined && { loadType: data.loadType?.trim() || null }),
         ...(data.notes !== undefined && { notes: data.notes?.trim() || null }),
+        ...(data.deliveryReceiptUrl !== undefined && {
+          deliveryReceiptUrl: data.deliveryReceiptUrl?.trim() || null,
+        }),
         ...(data.status !== undefined && { status: data.status }),
       },
       include: {
