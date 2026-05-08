@@ -3,6 +3,8 @@
  *
  * Estrutura: common, core (prisma, supabase, auth), modules (domínio).
  */
+import { RequestCacheModule } from '@eeeasycode/request-cache';
+import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -28,6 +30,8 @@ import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
+    RequestCacheModule.forRoot(),
+    CacheModule.register({ isGlobal: true }),
     PrismaModule,
     MailModule,
     NotificationsModule,

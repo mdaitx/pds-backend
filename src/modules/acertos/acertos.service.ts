@@ -12,6 +12,7 @@ import { DriverAuthService } from '../../core/driver-auth/driver-auth.service';
 import type { AuthUser } from '../../shared/domain/auth-user.interface';
 import { NotificationEventsService } from '../notifications/notification-events.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { DashboardChartsCacheInvalidator } from '../dashboard/dashboard-charts-cache-invalidator.service';
 
 @Injectable()
 export class AcertosService {
@@ -21,6 +22,7 @@ export class AcertosService {
     private readonly driverAuth: DriverAuthService,
     private readonly notificationEvents: NotificationEventsService,
     private readonly subscription: SubscriptionService,
+    private readonly dashboardChartsCacheInvalidator: DashboardChartsCacheInvalidator,
   ) {}
 
   private async ensureCanAccessTrip(user: AuthUser, tripId: string) {
@@ -90,6 +92,7 @@ export class AcertosService {
         },
       });
       void this.notificationEvents.onDisplacementTripCompleted(tripId);
+      await this.dashboardChartsCacheInvalidator.invalidateCompany(companyId);
       return { displacementCompleted: true as const, tripId };
     }
 
@@ -150,6 +153,7 @@ export class AcertosService {
       });
     });
     void this.notificationEvents.onTripFinalized(tripId);
+    await this.dashboardChartsCacheInvalidator.invalidateCompany(companyId);
     return this.formatSettlement(settlement);
   }
 

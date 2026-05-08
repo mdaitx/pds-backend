@@ -1,3 +1,4 @@
+import { RequestCache } from '@eeeasycode/request-cache';
 import {
   Injectable,
   ForbiddenException,
@@ -29,6 +30,7 @@ export class CompanyAccessService {
   /**
    * ID da empresa para operações de frota (motoristas, veículos, viagens CRUD, etc.).
    */
+  @RequestCache('company-access:resolveCompanyId')
   async resolveCompanyId(user: AuthUser): Promise<string> {
     if (user.role === Role.OWNER) {
       const owned = await this.findOwnedCompanyId(user.id);

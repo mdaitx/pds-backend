@@ -4,9 +4,10 @@ import { ViagensService, VIAGEM_REPOSITORY } from './application/viagens.service
 import { ViagemPrismaRepository } from './infrastructure/persistence/viagem.prisma.repository';
 import { PrismaModule } from '../../core/prisma/prisma.module';
 import { AuthModule } from '../../core/auth/auth.module';
+import { DashboardModule } from '../dashboard/dashboard.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, DashboardModule],
   controllers: [ViagensController],
   providers: [
     ViagensService,
