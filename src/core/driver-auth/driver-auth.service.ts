@@ -1,3 +1,4 @@
+import { RequestCache } from '@eeeasycode/request-cache';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +13,7 @@ import type { AuthUser } from '../../shared/domain/auth-user.interface';
 export class DriverAuthService {
   constructor(private readonly prisma: PrismaService) {}
 
+  @RequestCache('driver-auth:findDriverForAuthUser')
   async findDriverForAuthUser(
     user: AuthUser,
   ): Promise<{ id: string; companyId: string } | null> {

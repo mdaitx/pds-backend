@@ -14,6 +14,7 @@ import { CriarDespesaDto } from './dto/criar-despesa.dto';
 import { AtualizarDespesaDto } from './dto/atualizar-despesa.dto';
 import { NotificationEventsService } from '../notifications/notification-events.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { DashboardChartsCacheInvalidator } from '../dashboard/dashboard-charts-cache-invalidator.service';
 import { paginateResult, type PaginationOptions } from '../../common/pagination';
 
 const RECEIPT_REQUIRED_THRESHOLD = 100;
@@ -26,6 +27,7 @@ export class DespesasService {
     private readonly driverAuth: DriverAuthService,
     private readonly notificationEvents: NotificationEventsService,
     private readonly subscription: SubscriptionService,
+    private readonly dashboardChartsCacheInvalidator: DashboardChartsCacheInvalidator,
   ) {}
 
   /**
@@ -131,6 +133,7 @@ export class DespesasService {
       pricePerLiter: created.pricePerLiter != null ? Number(created.pricePerLiter) : null,
     };
     void this.notificationEvents.onExpenseCreated(created.id, user);
+    await this.dashboardChartsCacheInvalidator.invalidateCompany(companyId);
     return out;
   }
 
@@ -175,12 +178,14 @@ export class DespesasService {
         category: { select: { id: true, name: true, icon: true, color: true } },
       },
     });
-    return {
+    const mapped = {
       ...updated,
       amount: Number(updated.amount),
       liters: updated.liters != null ? Number(updated.liters) : null,
       pricePerLiter: updated.pricePerLiter != null ? Number(updated.pricePerLiter) : null,
     };
+    await this.dashboardChartsCacheInvalidator.invalidateCompany(companyId);
+    return mapped;
   }
 
   async remove(user: AuthUser, id: string) {
@@ -193,6 +198,7 @@ export class DespesasService {
     const { companyId } = await this.ensureCanAccessTrip(user, expense.tripId);
     await this.subscription.assertOperationalAccess(companyId);
     await this.prisma.expense.delete({ where: { id } });
+    await this.dashboardChartsCacheInvalidator.invalidateCompany(companyId);
     return { success: true };
   }
 }

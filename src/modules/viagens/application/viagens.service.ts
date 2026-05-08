@@ -10,6 +10,7 @@ import type { AuthUser } from '../../../shared/domain/auth-user.interface';
 import { CompanyAccessService } from '../../../core/company-access/company-access.service';
 import { NotificationEventsService } from '../../notifications/notification-events.service';
 import { SubscriptionService } from '../../subscription/subscription.service';
+import { DashboardChartsCacheInvalidator } from '../../dashboard/dashboard-charts-cache-invalidator.service';
 import { MAX_LIMIT, type PaginationOptions } from '../../../common/pagination';
 import type { IViagemRepository } from '../domain/ports/viagem.repository.port';
 import type { CriarViagemInput, AtualizarViagemInput } from '../domain/ports/viagem.repository.port';
@@ -28,6 +29,7 @@ export class ViagensService {
     private readonly companyAccess: CompanyAccessService,
     private readonly notificationEvents: NotificationEventsService,
     private readonly subscription: SubscriptionService,
+    private readonly dashboardChartsCacheInvalidator: DashboardChartsCacheInvalidator,
   ) {}
 
   private async getCompanyId(user: AuthUser): Promise<string> {
@@ -97,7 +99,11 @@ export class ViagensService {
     if (trip.status !== TripStatus.PENDING) {
       throw new BadRequestException('Só é possível iniciar viagens em “Aguardando”.');
     }
-    return this.viagemRepository.update(id, trip.companyId, { status: TripStatus.IN_PROGRESS });
+    const updated = await this.viagemRepository.update(id, trip.companyId, {
+      status: TripStatus.IN_PROGRESS,
+    });
+    await this.dashboardChartsCacheInvalidator.invalidateCompany(trip.companyId);
+    return updated;
   }
 
   async setDeliveryReceipt(user: AuthUser, id: string, url: string) {
@@ -142,6 +148,7 @@ export class ViagensService {
       endDate: dto.endDate ? (dto.endDate instanceof Date ? dto.endDate : new Date(dto.endDate)) : undefined,
     });
     void this.notificationEvents.onTripCreated(created.id);
+    await this.dashboardChartsCacheInvalidator.invalidateCompany(companyId);
     return created;
   }
 
@@ -179,7 +186,9 @@ export class ViagensService {
       updateData.endDate = new Date(dto.endDate);
     }
 
-    return this.viagemRepository.update(id, companyId, updateData);
+    const updated = await this.viagemRepository.update(id, trip.companyId, updateData);
+    await this.dashboardChartsCacheInvalidator.invalidateCompany(companyId);
+    return updated;
   }
 
   async remove(user: AuthUser, id: string) {
@@ -190,6 +199,7 @@ export class ViagensService {
       throw new NotFoundException('Viagem não encontrada');
     }
     await this.viagemRepository.delete(id, companyId);
+    await this.dashboardChartsCacheInvalidator.invalidateCompany(companyId);
     return { success: true };
   }
 }

@@ -1,9 +1,12 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject, Injectable, ForbiddenException } from '@nestjs/common';
+import type { Cache } from 'cache-manager';
 import { Role, TripStatus } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CompanyAccessService } from '../../core/company-access/company-access.service';
 import { DriverAuthService } from '../../core/driver-auth/driver-auth.service';
 import type { AuthUser } from '../../shared/domain/auth-user.interface';
+import { dashboardChartsCacheKey } from './dashboard-charts-cache.constants';
 
 type ChartPeriod = '1m' | '6m' | '1y';
 type ChartPoint = { mes: string; faturamento: number; despesas: number };
@@ -63,6 +66,7 @@ export class DashboardService {
     private readonly prisma: PrismaService,
     private readonly companyAccess: CompanyAccessService,
     private readonly driverAuth: DriverAuthService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
   async summary(user: AuthUser) {
@@ -81,29 +85,38 @@ export class DashboardService {
     }
 
     const companyId = await this.companyAccess.resolveCompanyId(user);
-    const now = new Date();
-    const oneYearStart = startOfDay(addMonths(now, -11));
+    const cacheKey = dashboardChartsCacheKey(companyId);
+    const ttlMs = 120_000;
 
-    const [tripsForCharts, expensesForCharts] = await Promise.all([
-      this.prisma.trip.findMany({
-        where: { companyId, startDate: { gte: oneYearStart } },
-        select: { id: true, startDate: true, status: true, freightValue: true },
-      }),
-      this.prisma.expense.findMany({
-        where: { trip: { companyId }, date: { gte: oneYearStart } },
-        select: {
-          id: true,
-          date: true,
-          amount: true,
-          category: { select: { name: true, color: true } },
-        },
-      }),
-    ]);
+    return this.cacheManager.wrap(
+      cacheKey,
+      async () => {
+        const now = new Date();
+        const oneYearStart = startOfDay(addMonths(now, -11));
 
-    return {
-      chartDataByPeriod: this.buildChartDataByPeriod(tripsForCharts, expensesForCharts),
-      categoryBarsByPeriod: this.buildCategoryBarsByPeriod(expensesForCharts),
-    };
+        const [tripsForCharts, expensesForCharts] = await Promise.all([
+          this.prisma.trip.findMany({
+            where: { companyId, startDate: { gte: oneYearStart } },
+            select: { id: true, startDate: true, status: true, freightValue: true },
+          }),
+          this.prisma.expense.findMany({
+            where: { trip: { companyId }, date: { gte: oneYearStart } },
+            select: {
+              id: true,
+              date: true,
+              amount: true,
+              category: { select: { name: true, color: true } },
+            },
+          }),
+        ]);
+
+        return {
+          chartDataByPeriod: this.buildChartDataByPeriod(tripsForCharts, expensesForCharts),
+          categoryBarsByPeriod: this.buildCategoryBarsByPeriod(expensesForCharts),
+        };
+      },
+      ttlMs,
+    );
   }
 
   private async ownerSummary(user: AuthUser) {
