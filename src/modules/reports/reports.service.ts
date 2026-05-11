@@ -118,6 +118,7 @@ export class ReportsService {
         loadType: trip.loadType,
         notes: trip.notes,
         status: trip.status,
+        displacementToLoad: trip.displacementToLoad,
         vehicle: trip.vehicle,
         driver: trip.driver,
         createdAt: trip.createdAt,
