@@ -54,7 +54,7 @@ export class ReportsService {
       },
       include: {
         vehicle: { select: { id: true, plate: true, brand: true, model: true, vehicleType: true } },
-        driver: { select: { id: true, name: true } },
+        driver: { select: { id: true, name: true, commissionPct: true } },
         expenses: {
           include: { category: { select: { id: true, name: true, icon: true, color: true } } },
           orderBy: { date: 'desc' },
@@ -120,7 +120,12 @@ export class ReportsService {
         status: trip.status,
         displacementToLoad: trip.displacementToLoad,
         vehicle: trip.vehicle,
-        driver: trip.driver,
+        driver: {
+          id: trip.driver.id,
+          name: trip.driver.name,
+          commissionPct:
+            trip.driver.commissionPct != null ? Number(trip.driver.commissionPct) : null,
+        },
         createdAt: trip.createdAt,
         updatedAt: trip.updatedAt,
       };
