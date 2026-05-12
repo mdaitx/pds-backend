@@ -6,7 +6,7 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 import { CompanyAccessService } from '../../core/company-access/company-access.service';
 import { DriverAuthService } from '../../core/driver-auth/driver-auth.service';
 import type { AuthUser } from '../../shared/domain/auth-user.interface';
-import { dashboardChartsCacheKey } from './dashboard-charts-cache.constants';
+import { dashboardChartsCacheKey, dashboardSummaryCacheKey } from './dashboard-charts-cache.constants';
 
 type ChartPeriod = '1m' | '6m' | '1y';
 type ChartPoint = { mes: string; faturamento: number; despesas: number };
@@ -74,7 +74,10 @@ export class DashboardService {
       return this.driverSummary(user);
     }
     if (user.role === Role.OWNER || user.role === Role.ADMIN) {
-      return this.ownerSummary(user);
+      const companyId = await this.companyAccess.resolveCompanyId(user);
+      const cacheKey = dashboardSummaryCacheKey(companyId);
+      const ttlMs = 45_000;
+      return this.cacheManager.wrap(cacheKey, () => this.computeOwnerSummary(user, companyId), ttlMs);
     }
     throw new ForbiddenException('Acesso negado');
   }
@@ -119,8 +122,7 @@ export class DashboardService {
     );
   }
 
-  private async ownerSummary(user: AuthUser) {
-    const companyId = await this.companyAccess.resolveCompanyId(user);
+  private async computeOwnerSummary(user: AuthUser, companyId: string) {
     const now = new Date();
     const monthStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
     const nextMonthStart = startOfDay(new Date(now.getFullYear(), now.getMonth() + 1, 1));

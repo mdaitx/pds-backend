@@ -1,8 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { BadRequestException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import type { Cache } from 'cache-manager';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CompanyAccessService } from '../../core/company-access/company-access.service';
 import type { AuthUser } from '../../shared/domain/auth-user.interface';
+import { reportsBumpCacheKey } from '../dashboard/dashboard-charts-cache.constants';
 
 type TripsReportPeriod = {
   from?: string;
@@ -33,6 +36,7 @@ export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly companyAccess: CompanyAccessService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
   async trips(user: AuthUser, period: TripsReportPeriod) {
@@ -47,6 +51,16 @@ export class ReportsService {
     }
 
     const companyId = await this.companyAccess.resolveCompanyId(user);
+    const bump = (await this.cacheManager.get<number>(reportsBumpCacheKey(companyId))) ?? 0;
+    const fromYmd = period.from!;
+    const toYmd = period.to!;
+    const cacheKey = `reports:trips:v1:${companyId}:${bump}:${fromYmd}:${toYmd}`;
+    const ttlMs = 90_000;
+
+    return this.cacheManager.wrap(cacheKey, async () => this.computeTripsReport(companyId, from, to), ttlMs);
+  }
+
+  private async computeTripsReport(companyId: string, from: Date, to: Date) {
     const trips = await this.prisma.trip.findMany({
       where: {
         companyId,
