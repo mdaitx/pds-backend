@@ -2,7 +2,7 @@
  * Ponto de entrada da API PDS (backend NestJS).
  *
  * Ordem de carregamento: dotenv primeiro (para DATABASE_URL do Prisma),
- * depois criação do app, pipes globais, CORS e subida do servidor.
+ * depois criação do app, CORS, compression, pipes/filtros e subida do servidor.
  */
 import 'dotenv/config';
 
@@ -17,6 +17,26 @@ import { RouteTimingInterceptor } from './common/interceptors/route-timing.inter
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
+  // CORS deve ser registado antes de compression e de rotas/guards, para o
+  // preflight OPTIONS receber Access-Control-* antes de qualquer outra lógica.
+  const corsOrigins = process.env.CORS_ORIGIN?.split(',').map((o) => o.trim()).filter(Boolean) ??
+    ['http://localhost:3000', 'http://localhost:3001'];
+  app.enableCors({
+    origin: corsOrigins,
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'Origin',
+      'X-Requested-With',
+      'apikey',
+      'x-client-info',
+      'x-supabase-api-version',
+    ],
+  });
+
   app.use(compression());
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new RouteTimingInterceptor());
@@ -30,15 +50,6 @@ async function bootstrap() {
       transform: true, // converte query/body para os tipos do DTO (ex: string -> number)
     }),
   );
-
-  // CORS: define quais origens podem chamar a API (evita requisições de outros domínios).
-  // Em produção, defina CORS_ORIGIN com as URLs do frontend (ex: https://app.pds.com).
-  const corsOrigins = process.env.CORS_ORIGIN?.split(',').map((o) => o.trim()).filter(Boolean) ??
-    ['http://localhost:3000', 'http://localhost:3001'];
-  app.enableCors({
-    origin: corsOrigins,
-    credentials: true, // permite envio de cookies/credenciais
-  });
 
   const isProd = process.env.NODE_ENV === 'production';
   const swaggerEnabled = !isProd || process.env.SWAGGER_ENABLED === 'true';
