@@ -162,7 +162,7 @@ export class NotificationEventsService {
       });
       const link = `${this.baseUrl()}/dashboard/viagens/${trip.id}/acerto`;
       const subject = `[Truck Finanças] Viagem ${trip.code} finalizada — acerto disponível`;
-      const textDriver = `Olá, ${trip.driver.name}.\n\nA viagem ${trip.code} foi finalizada.\nValor a receber (comissão líquida de adiantamentos): ${pay}\n\nConsulte o acerto: ${link}\n`;
+      const textDriver = `Olá, ${trip.driver.name}.\n\nA viagem ${trip.code} foi finalizada.\nValor a receber (comissão da viagem): ${pay}\n(Adiantamentos abatem do salário, não da comissão.)\n\nConsulte o acerto: ${link}\n`;
       if (toDriver) {
         await this.mail.sendMail({ to: toDriver, subject, text: textDriver });
       }

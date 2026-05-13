@@ -25,6 +25,12 @@ export class JwtAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
+
+    // Preflight CORS não envia Bearer; sem isto o guard devolve 401 sem cabeçalhos CORS.
+    if (request.method === 'OPTIONS') {
+      return true;
+    }
+
     const authHeader = request.headers.authorization;
 
     if (!authHeader?.startsWith('Bearer ')) {

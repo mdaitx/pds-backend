@@ -126,7 +126,8 @@ export class AcertosService {
         ? freightValue
         : grossProfit;
     const driverCommissionAmt = (commissionBase * commissionPct) / 100;
-    const amountToPayDriver = driverCommissionAmt - totalAdvances;
+    /** Comissão integral na viagem; adiantamentos abatem do salário na folha, não daqui. */
+    const amountToPayDriver = driverCommissionAmt;
     const ownerResult = grossProfit - driverCommissionAmt;
 
     const settlement = await this.prisma.$transaction(async (tx) => {
