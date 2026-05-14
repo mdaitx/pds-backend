@@ -36,6 +36,18 @@ export class OnboardingService {
     private readonly subscription: SubscriptionService,
   ) {}
 
+  private resolveEffectiveCommissionPct(
+    companyDefaultCommission: Decimal | null,
+    driverCommissionPct?: number,
+  ): number | undefined {
+    const defaultCommission = companyDefaultCommission != null ? Number(companyDefaultCommission) : undefined;
+    const informedDriverCommission = driverCommissionPct != null ? Number(driverCommissionPct) : undefined;
+    if (defaultCommission == null && informedDriverCommission == null) return undefined;
+    if (defaultCommission == null) return informedDriverCommission;
+    if (informedDriverCommission == null) return defaultCommission;
+    return Math.max(defaultCommission, informedDriverCommission);
+  }
+
   /**
    * Retorna o status do onboarding para o dono. Se não for OWNER, retorna completed=true
    * e step=4 para não bloquear motoristas no dashboard.
@@ -201,13 +213,18 @@ export class OnboardingService {
       throw new ConflictException('Já existe um motorista com este CPF');
     }
 
+    const effectiveCommissionPct = this.resolveEffectiveCommissionPct(
+      company.defaultCommission,
+      dto.commissionPct,
+    );
+
     return this.prisma.driver.create({
       data: {
         name: dto.name,
         cpf: cpfClean,
         phone: dto.phone ?? undefined,
         email: dto.email ?? undefined,
-        commissionPct: dto.commissionPct != null ? new Decimal(dto.commissionPct) : undefined,
+        commissionPct: effectiveCommissionPct != null ? new Decimal(effectiveCommissionPct) : undefined,
         monthlySalary:
           dto.monthlySalary != null ? new Decimal(dto.monthlySalary) : new Decimal(0),
         companyId: company.id,

@@ -1,6 +1,5 @@
 import {
   Injectable,
-  ForbiddenException,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -25,6 +24,18 @@ export class MotoristasService {
 
   private async getCompanyId(user: AuthUser): Promise<string> {
     return this.companyAccess.resolveCompanyId(user);
+  }
+
+  private resolveEffectiveCommissionPct(
+    companyDefaultCommission: Decimal | null,
+    driverCommissionPct?: number,
+  ): number | undefined {
+    const defaultCommission = companyDefaultCommission != null ? Number(companyDefaultCommission) : undefined;
+    const informedDriverCommission = driverCommissionPct != null ? Number(driverCommissionPct) : undefined;
+    if (defaultCommission == null && informedDriverCommission == null) return undefined;
+    if (defaultCommission == null) return informedDriverCommission;
+    if (informedDriverCommission == null) return defaultCommission;
+    return Math.max(defaultCommission, informedDriverCommission);
   }
 
   /** Garante que o usuário é motorista da empresa e ainda não está vinculado a outra ficha. */
@@ -90,6 +101,13 @@ export class MotoristasService {
   async create(user: AuthUser, dto: CriarMotoristaDto) {
     const companyId = await this.getCompanyId(user);
     await this.subscription.assertOperationalAccess(companyId);
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { defaultCommission: true },
+    });
+    if (!company) {
+      throw new NotFoundException('Empresa não encontrada');
+    }
     const cpfClean = (dto.cpf ?? '').replace(/\D/g, '');
     if (cpfClean.length > 0 && cpfClean.length !== 11) {
       throw new BadRequestException('CPF deve ter 11 dígitos quando informado');
@@ -116,6 +134,11 @@ export class MotoristasService {
       await this.assertLinkedUserForDriver(companyId, dto.linkedUserId);
     }
 
+    const effectiveCommissionPct = this.resolveEffectiveCommissionPct(
+      company.defaultCommission,
+      dto.commissionPct,
+    );
+
     const created = await this.prisma.driver.create({
       data: {
         companyId,
@@ -125,7 +148,7 @@ export class MotoristasService {
         cnh: dto.cnh?.trim() || undefined,
         phone: dto.phone?.trim() || undefined,
         email: dto.email?.trim() || undefined,
-        commissionPct: dto.commissionPct != null ? new Decimal(dto.commissionPct) : undefined,
+        commissionPct: effectiveCommissionPct != null ? new Decimal(effectiveCommissionPct) : undefined,
         monthlySalary: new Decimal(dto.monthlySalary),
         paymentMethod: dto.paymentMethod?.trim() || undefined,
         pixKey: dto.pixKey?.trim() || undefined,
@@ -149,6 +172,13 @@ export class MotoristasService {
   async update(user: AuthUser, id: string, dto: AtualizarMotoristaDto) {
     const companyId = await this.getCompanyId(user);
     await this.subscription.assertOperationalAccess(companyId);
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { defaultCommission: true },
+    });
+    if (!company) {
+      throw new NotFoundException('Empresa não encontrada');
+    }
     const driver = await this.prisma.driver.findFirst({
       where: { id, companyId },
     });
@@ -182,6 +212,11 @@ export class MotoristasService {
       await this.assertLinkedUserForDriver(companyId, dto.linkedUserId, id);
     }
 
+    const effectiveCommissionPct =
+      dto.commissionPct !== undefined
+        ? this.resolveEffectiveCommissionPct(company.defaultCommission, dto.commissionPct)
+        : undefined;
+
     const updated = await this.prisma.driver.update({
       where: { id },
       data: {
@@ -196,7 +231,8 @@ export class MotoristasService {
         ...(dto.phone !== undefined && { phone: dto.phone?.trim() || null }),
         ...(dto.email !== undefined && { email: dto.email?.trim() || null }),
         ...(dto.commissionPct !== undefined && {
-          commissionPct: new Decimal(dto.commissionPct),
+          commissionPct:
+            effectiveCommissionPct != null ? new Decimal(effectiveCommissionPct) : null,
         }),
         ...(dto.monthlySalary !== undefined && {
           monthlySalary: new Decimal(dto.monthlySalary),
