@@ -4,7 +4,12 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Role, TripStatus, CommissionCalculationMethod } from '@prisma/client';
+import {
+  Role,
+  TripStatus,
+  CommissionCalculationMethod,
+  type Settlement,
+} from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CompanyAccessService } from '../../core/company-access/company-access.service';
@@ -115,11 +120,9 @@ export class AcertosService {
     const freightValue = trip.freightValue ? Number(trip.freightValue) : 0;
     const totalExpenses = trip.expenses.reduce((sum, e) => sum + Number(e.amount), 0);
     const totalAdvances = trip.advances.reduce((sum, a) => sum + Number(a.amount), 0);
-    const commissionPct = trip.driver.commissionPct
-      ? Number(trip.driver.commissionPct)
-      : company.defaultCommission
-        ? Number(company.defaultCommission)
-        : 0;
+    const driverCommissionPct = trip.driver.commissionPct != null ? Number(trip.driver.commissionPct) : 0;
+    const defaultCommissionPct = company.defaultCommission != null ? Number(company.defaultCommission) : 0;
+    const commissionPct = Math.max(driverCommissionPct, defaultCommissionPct);
     const grossProfit = freightValue - totalExpenses;
     const commissionBase =
       company.commissionMethod === CommissionCalculationMethod.FREIGHT_VALUE
@@ -225,7 +228,7 @@ export class AcertosService {
     return this.formatSettlement(updated);
   }
 
-  private formatSettlement(s: any) {
+  private formatSettlement(s: Settlement) {
     return {
       id: s.id,
       tripId: s.tripId,
