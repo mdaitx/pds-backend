@@ -64,6 +64,7 @@ export class CompanyUsersService {
     authEmail: string,
     dto: CreateCompanyUserDto,
     useInvite: boolean,
+    rawPassword?: string,
   ): void {
     if (useInvite) return;
     if (
@@ -82,7 +83,10 @@ export class CompanyUsersService {
           ? 'administrador'
           : 'co-proprietário';
     const subject = `[Truck Finanças] Acesso criado — ${roleLabel}`;
-    const text = `Olá, ${name}.\n\nFoi criada uma conta de ${roleLabel} no Truck Finanças para o endereço ${authEmail}.\n\nInicie sessão em: ${loginUrl}\n\nSe não reconhece este registo, contacte a sua empresa.\n`;
+    const credentialBlock = rawPassword
+      ? `\nCredenciais iniciais:\n- E-mail: ${authEmail}\n- Senha: ${rawPassword}\n\nPor segurança, altere a senha após o primeiro acesso.\n`
+      : '';
+    const text = `Olá, ${name}.\n\nFoi criada uma conta de ${roleLabel} no Truck Finanças para o endereço ${authEmail}.${credentialBlock}\nInicie sessão em: ${loginUrl}\n\nSe não reconhece este registo, contacte a sua empresa.\n`;
     void this.mail.sendMail({ to: authEmail, subject, text }).catch((err) => {
       this.logger.warn(
         `E-mail de boas-vindas não enviado: ${err instanceof Error ? err.message : String(err)}`,
@@ -165,7 +169,7 @@ export class CompanyUsersService {
     authEmail: string,
     dto: CreateCompanyUserDto,
   ): Promise<void> {
-    let driverRow = await this.prisma.driver.findFirst({
+    const driverRow = await this.prisma.driver.findFirst({
       where: dto.driverId
         ? { id: dto.driverId, companyId }
         : { companyId, email: { equals: authEmail, mode: 'insensitive' } },
@@ -331,7 +335,7 @@ export class CompanyUsersService {
         await this.linkDriverToNewStaffUser(companyId, created.id, authEmail, dto);
       }
 
-      this.notifyNewStaffAccountCreated(authEmail, dto, useInvite);
+      this.notifyNewStaffAccountCreated(authEmail, dto, useInvite, password || undefined);
 
       return {
         ...created,
