@@ -10,7 +10,6 @@ import { Role } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { SupabaseService } from '../../core/supabase/supabase.service';
 import { CompanyAccessService } from '../../core/company-access/company-access.service';
-import { MailService } from '../../core/mail/mail.service';
 import type { AuthUser } from '../../shared/domain/auth-user.interface';
 import { CreateCompanyUserDto } from './dto/create-company-user.dto';
 import { UpdateCompanyUserDto } from './dto/update-company-user.dto';
@@ -23,7 +22,6 @@ export class CompanyUsersService {
     private readonly prisma: PrismaService,
     private readonly supabase: SupabaseService,
     private readonly companyAccess: CompanyAccessService,
-    private readonly mail: MailService,
   ) {}
 
   /**
@@ -50,48 +48,6 @@ export class CompanyUsersService {
   private inviteRedirectTo(): string {
     const base = (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
     return `${base}/reset-password`;
-  }
-
-  private appOrigin(): string {
-    return (process.env.FRONTEND_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-  }
-
-  /**
-   * E-mail ao criar conta com senha (motorista, admin ou co-proprietário).
-   * No fluxo só com convite Supabase, o e-mail de convite já é enviado pelo Auth — não duplicamos aqui.
-   */
-  private notifyNewStaffAccountCreated(
-    authEmail: string,
-    dto: CreateCompanyUserDto,
-    useInvite: boolean,
-    rawPassword?: string,
-  ): void {
-    if (useInvite) return;
-    if (
-      dto.role !== Role.DRIVER &&
-      dto.role !== Role.ADMIN &&
-      dto.role !== Role.OWNER
-    ) {
-      return;
-    }
-    const loginUrl = `${this.appOrigin()}/login`;
-    const name = (dto.name?.trim() || authEmail).trim();
-    const roleLabel =
-      dto.role === Role.DRIVER
-        ? 'motorista'
-        : dto.role === Role.ADMIN
-          ? 'administrador'
-          : 'co-proprietário';
-    const subject = `[Truck Finanças] Acesso criado — ${roleLabel}`;
-    const credentialBlock = rawPassword
-      ? `\nCredenciais iniciais:\n- E-mail: ${authEmail}\n- Senha: ${rawPassword}\n\nPor segurança, altere a senha após o primeiro acesso.\n`
-      : '';
-    const text = `Olá, ${name}.\n\nFoi criada uma conta de ${roleLabel} no Truck Finanças para o endereço ${authEmail}.${credentialBlock}\nInicie sessão em: ${loginUrl}\n\nSe não reconhece este registo, contacte a sua empresa.\n`;
-    void this.mail.sendMail({ to: authEmail, subject, text }).catch((err) => {
-      this.logger.warn(
-        `E-mail de boas-vindas não enviado: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    });
   }
 
   /**
@@ -205,15 +161,7 @@ export class CompanyUsersService {
     const companyId = await this.companyAccess.assertPrimaryOwner(inviter);
 
     const email = dto.email.trim().toLowerCase();
-    const password =
-      dto.password !== undefined && dto.password !== '' ? dto.password.trim() : '';
-
     if (dto.role === Role.DRIVER) {
-      if (password.length === 0) {
-        throw new BadRequestException(
-          'Senha é obrigatória para usuário motorista.',
-        );
-      }
       if (dto.driverId) {
         const existingDriver = await this.prisma.driver.findFirst({
           where: { id: dto.driverId, companyId },
@@ -263,7 +211,8 @@ export class CompanyUsersService {
       throw new BadRequestException('Perfil inválido.');
     }
 
-    const useInvite = dto.role !== Role.DRIVER && password.length === 0;
+    // Regra de segurança: novos usuários sempre recebem link único para definir senha no primeiro acesso.
+    const useInvite = true;
 
     const existing = await this.prisma.user.findUnique({
       where: { email },
@@ -274,42 +223,21 @@ export class CompanyUsersService {
 
     const admin = this.supabase.getClient().auth.admin;
 
-    let supabaseUserId: string;
-    let authEmail: string;
-
-    if (!useInvite) {
-      const { data, error } = await admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-      });
-      if (error) {
-        throw new BadRequestException(
-          error.message ?? 'Não foi possível criar o usuário no Supabase (verifique SERVICE_ROLE_KEY).',
-        );
-      }
-      if (!data.user?.id || !data.user.email) {
-        throw new BadRequestException('Resposta inválida ao criar usuário no Supabase.');
-      }
-      supabaseUserId = data.user.id;
-      authEmail = data.user.email.toLowerCase();
-    } else {
-      const { data, error } = await admin.inviteUserByEmail(email, {
-        data: { display_name: dto.name?.trim() ?? undefined },
-        redirectTo: this.inviteRedirectTo(),
-      });
-      if (error) {
-        throw new BadRequestException(
-          error.message ??
-            'Não foi possível enviar o convite (verifique SERVICE_ROLE_KEY e FRONTEND_URL).',
-        );
-      }
-      if (!data.user?.id) {
-        throw new BadRequestException('Resposta inválida ao convidar usuário no Supabase.');
-      }
-      supabaseUserId = data.user.id;
-      authEmail = (data.user.email ?? email).toLowerCase();
+    const { data, error } = await admin.inviteUserByEmail(email, {
+      data: { display_name: dto.name?.trim() ?? undefined },
+      redirectTo: this.inviteRedirectTo(),
+    });
+    if (error) {
+      throw new BadRequestException(
+        error.message ??
+          'Não foi possível enviar o convite (verifique SERVICE_ROLE_KEY e FRONTEND_URL).',
+      );
     }
+    if (!data.user?.id) {
+      throw new BadRequestException('Resposta inválida ao convidar usuário no Supabase.');
+    }
+    const supabaseUserId = data.user.id;
+    const authEmail = (data.user.email ?? email).toLowerCase();
 
     try {
       const created = await this.prisma.user.create({
@@ -334,8 +262,6 @@ export class CompanyUsersService {
       if (dto.role === Role.DRIVER) {
         await this.linkDriverToNewStaffUser(companyId, created.id, authEmail, dto);
       }
-
-      this.notifyNewStaffAccountCreated(authEmail, dto, useInvite, password || undefined);
 
       return {
         ...created,
