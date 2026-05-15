@@ -10,12 +10,82 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as compression from 'compression';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { RouteTimingInterceptor } from './common/interceptors/route-timing.interceptor';
 
+function parsePositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  const isProd = process.env.NODE_ENV === 'production';
+  const expressApp = app.getHttpAdapter().getInstance();
+
+  // Em produção (Render/Reverse Proxy), permite identificar corretamente IP de origem.
+  expressApp.set('trust proxy', 1);
+  expressApp.disable('x-powered-by');
+
+  app.use(
+    helmet({
+      // API JSON sem renderização HTML não precisa de CSP rígido aqui.
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      hsts: isProd ? undefined : false,
+    }),
+  );
+
+  const globalRateLimitWindowMs = parsePositiveIntEnv(
+    'RATE_LIMIT_GLOBAL_TTL_MS',
+    15 * 60 * 1000,
+  );
+  const globalRateLimitMax = parsePositiveIntEnv('RATE_LIMIT_GLOBAL_MAX', 300);
+  app.use(
+    rateLimit({
+      windowMs: globalRateLimitWindowMs,
+      limit: globalRateLimitMax,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: 'Muitas requisições. Tente novamente em alguns instantes.',
+    }),
+  );
+
+  const authRateLimitWindowMs = parsePositiveIntEnv(
+    'RATE_LIMIT_AUTH_TTL_MS',
+    15 * 60 * 1000,
+  );
+  const recoverRateLimitMax = parsePositiveIntEnv('RATE_LIMIT_RECOVER_MAX', 5);
+  app.use(
+    '/auth/recover-password',
+    rateLimit({
+      windowMs: authRateLimitWindowMs,
+      limit: recoverRateLimitMax,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message:
+        'Muitas tentativas de recuperação de senha. Aguarde alguns minutos e tente novamente.',
+    }),
+  );
+
+  const inviteRateLimitMax = parsePositiveIntEnv('RATE_LIMIT_INVITE_MAX', 20);
+  app.use(
+    '/company-users',
+    rateLimit({
+      windowMs: authRateLimitWindowMs,
+      limit: inviteRateLimitMax,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      skip: (req) => req.method === 'GET',
+      message:
+        'Muitas operações administrativas de usuários. Aguarde alguns minutos e tente novamente.',
+    }),
+  );
 
   // CORS deve ser registado antes de compression e de rotas/guards, para o
   // preflight OPTIONS receber Access-Control-* antes de qualquer outra lógica.
@@ -51,7 +121,6 @@ async function bootstrap() {
     }),
   );
 
-  const isProd = process.env.NODE_ENV === 'production';
   const swaggerEnabled = !isProd || process.env.SWAGGER_ENABLED === 'true';
   if (swaggerEnabled) {
     const config = new DocumentBuilder()

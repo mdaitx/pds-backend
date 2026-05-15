@@ -15,9 +15,9 @@ export class SupabaseService {
   getClient(): SupabaseClient {
     if (!this._client) {
       const url = process.env.SUPABASE_URL;
-      const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (!url || !key) {
-        throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY (or SUPABASE_SERVICE_ROLE_KEY) must be set');
+        throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set');
       }
       this._client = createClient(url, key, {
         auth: { persistSession: false }, // backend não mantém sessão de usuário

@@ -40,17 +40,30 @@ export class AuthService {
     private readonly supabase: SupabaseService,
   ) {}
 
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
   /**
    * Garante uma linha em `usuarios` para o usuário do Supabase (cria, vincula por e-mail ou recupera após P2002).
    */
   private async ensureUserForSupabase(authUser: { id: string; email: string }): Promise<User> {
+    const normalizedEmail = this.normalizeEmail(authUser.email);
+
     const bySupabase = await this.prisma.user.findUnique({
       where: { supabaseUserId: authUser.id },
     });
-    if (bySupabase) return bySupabase;
+    if (bySupabase) {
+      if (this.normalizeEmail(bySupabase.email) !== normalizedEmail) {
+        throw new UnauthorizedException(
+          'Inconsistência de conta: e-mail do token não corresponde ao usuário vinculado.',
+        );
+      }
+      return bySupabase;
+    }
 
     const byEmail = await this.prisma.user.findUnique({
-      where: { email: authUser.email },
+      where: { email: normalizedEmail },
     });
     if (byEmail) {
       if (byEmail.supabaseUserId != null && byEmail.supabaseUserId !== authUser.id) {
@@ -58,7 +71,7 @@ export class AuthService {
       }
       return this.prisma.user.update({
         where: { id: byEmail.id },
-        data: { supabaseUserId: authUser.id },
+        data: { supabaseUserId: authUser.id, email: normalizedEmail },
       });
     }
 
@@ -66,7 +79,7 @@ export class AuthService {
       return await this.prisma.user.create({
         data: {
           supabaseUserId: authUser.id,
-          email: authUser.email,
+          email: normalizedEmail,
           role: Role.OWNER,
         },
       });
@@ -78,7 +91,7 @@ export class AuthService {
         if (afterRace) return afterRace;
 
         const emailRow = await this.prisma.user.findUnique({
-          where: { email: authUser.email },
+          where: { email: normalizedEmail },
         });
         if (emailRow) {
           if (emailRow.supabaseUserId != null && emailRow.supabaseUserId !== authUser.id) {
@@ -86,7 +99,7 @@ export class AuthService {
           }
           return this.prisma.user.update({
             where: { id: emailRow.id },
-            data: { supabaseUserId: authUser.id },
+            data: { supabaseUserId: authUser.id, email: normalizedEmail },
           });
         }
       }
@@ -136,7 +149,7 @@ export class AuthService {
     try {
       const user = await this.ensureUserForSupabase({
         id: authUser.id,
-        email: authUser.email,
+        email: this.normalizeEmail(authUser.email),
       });
 
       const result = this.toAuthUser(user);
