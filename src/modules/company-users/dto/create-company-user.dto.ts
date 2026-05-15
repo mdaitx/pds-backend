@@ -11,8 +11,8 @@ import {
 import { Role } from '@prisma/client';
 
 /**
- * Convite de usuário com login (admin ou co-proprietário). Motorista continua em POST /drivers.
- * Sem `password`: envia convite por e-mail (Supabase) para definir senha no primeiro acesso.
+ * Convite de usuário com login (admin, co-proprietário e motorista).
+ * Por segurança, o fluxo envia link único por e-mail (Supabase) para definir senha no primeiro acesso.
  */
 export class CreateCompanyUserDto {
   @ApiProperty({ example: 'novo@empresa.com', maxLength: 255 })
@@ -27,7 +27,8 @@ export class CreateCompanyUserDto {
   name?: string;
 
   @ApiPropertyOptional({
-    description: 'Senha inicial; se omitido, envia convite por e-mail',
+    description:
+      'Campo legado. Por segurança, o backend envia convite com link de primeiro acesso e não usa senha em texto.',
     minLength: 6,
     maxLength: 128,
   })
