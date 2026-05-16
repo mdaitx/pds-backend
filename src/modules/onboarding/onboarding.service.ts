@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { Role, SubscriptionStatus } from '@prisma/client';
+import { Role, SubscriptionPlanKey, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import type { AuthUser } from '../../core/auth/auth.service';
 import {
@@ -13,7 +13,8 @@ import {
   CreateOnboardingFirstDriverDto,
 } from './dto/onboarding.dto';
 import { Decimal } from '@prisma/client/runtime/library';
-import { SubscriptionService, TRIAL_DAYS } from '../subscription/subscription.service';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { TRIAL_DAYS } from '../subscription/subscription-plans';
 
 export interface OnboardingStatus {
   completed: boolean;
@@ -145,6 +146,7 @@ export class OnboardingService {
         email: dto.email ?? undefined,
         defaultCommission: dto.defaultCommission != null ? new Decimal(dto.defaultCommission) : undefined,
         ownerId: user.id,
+        planKey: SubscriptionPlanKey.PRO,
         trialEndsAt,
         subscriptionStatus: SubscriptionStatus.TRIAL,
       },
@@ -203,7 +205,7 @@ export class OnboardingService {
     if (!company) {
       throw new BadRequestException('Cadastre a empresa antes do motorista');
     }
-    await this.subscription.assertOperationalAccess(company.id);
+    await this.subscription.assertCanAddDriver(company.id);
 
     const cpfClean = dto.cpf.replace(/\D/g, '');
     const existing = await this.prisma.driver.findFirst({

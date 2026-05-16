@@ -53,6 +53,7 @@ export class SubscriptionController {
     return this.subscription.createCheckoutSession({
       companyId,
       userEmail: user.email,
+      planKey: dto.planKey,
       successPath: dto.successPath,
       cancelPath: dto.cancelPath,
     });
