@@ -67,6 +67,14 @@ enum SubscriptionStatus {
   @@map("subscription_status")
 }
 
+enum SubscriptionPlanKey {
+  BASIC
+  PRO
+  PREMIUM
+
+  @@map("subscription_plan_key")
+}
+
 // -----------------------------------------------------------------------------
 // Empresa: dados cadastrais do dono; uma empresa por usuário OWNER.
 // -----------------------------------------------------------------------------
@@ -87,6 +95,7 @@ model Company {
   trialEndsAt          DateTime?                       @map("trial_ends_at")
   /// Fim do período pago atual (renovação mensal).
   currentPeriodEnd     DateTime?                       @map("current_period_end")
+  planKey              SubscriptionPlanKey             @default(PRO) @map("plan_key")
   stripeCustomerId     String?                         @unique @map("stripe_customer_id")
   stripeSubscriptionId String?                         @unique @map("stripe_subscription_id")
   ownerId          String   @unique @map("owner_id")

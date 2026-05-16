@@ -100,7 +100,7 @@ export class MotoristasService {
 
   async create(user: AuthUser, dto: CriarMotoristaDto) {
     const companyId = await this.getCompanyId(user);
-    await this.subscription.assertOperationalAccess(companyId);
+    await this.subscription.assertCanAddDriver(companyId);
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: { defaultCommission: true },

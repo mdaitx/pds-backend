@@ -6,19 +6,39 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../core/prisma/prisma.service';
-import { SubscriptionStatus } from '@prisma/client';
+import { SubscriptionPlanKey, SubscriptionStatus } from '@prisma/client';
 import Stripe from 'stripe';
-
-export const TRIAL_MAX_VEHICLES = 3;
-export const TRIAL_DAYS = 30;
-export const PRICE_PER_VEHICLE_BRL = 19.9;
+import {
+  ensurePlanCheckoutReady,
+  listPlanCatalogPublic,
+  planFromStripePriceId,
+  resolveCompanyPlanKey,
+  resolvePlanConfig,
+  resolveStripePriceIdByPlan,
+  TRIAL_MAX_VEHICLES,
+} from './subscription-plans';
 
 export type SubscriptionStatusPayload = {
   status: SubscriptionStatus;
+  currentPlanKey: SubscriptionPlanKey;
+  plans: Array<{
+    key: SubscriptionPlanKey;
+    name: string;
+    description: string;
+    priceBrl: number;
+    maxVehicles: number | null;
+    maxDrivers: number | null;
+    checkoutReady: boolean;
+    isCurrent: boolean;
+  }>;
+  limits: {
+    maxVehicles: number | null;
+    maxDrivers: number | null;
+  };
   isOperational: boolean;
   vehicleCount: number;
+  driverCount: number;
   maxVehiclesTrial: number;
-  pricePerVehicleBrl: number;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
   stripeConfigured: boolean;
@@ -33,7 +53,21 @@ export class SubscriptionService {
 
   constructor(private readonly prisma: PrismaService) {
     const key = process.env.STRIPE_SECRET_KEY?.trim();
-    this.stripe = key ? new Stripe(key) : null;
+    if (!key) {
+      this.stripe = null;
+      return;
+    }
+
+    const configuredApiVersion = process.env.STRIPE_API_VERSION?.trim();
+    const apiVersion = configuredApiVersion
+      ? (configuredApiVersion as Stripe.LatestApiVersion)
+      : undefined;
+
+    this.stripe = new Stripe(key, {
+      ...(apiVersion ? { apiVersion } : {}),
+      maxNetworkRetries: 2,
+      typescript: true,
+    });
   }
 
   isOperational(company: {
@@ -55,6 +89,16 @@ export class SubscriptionService {
 
   private trialVehicleCapReached(vehicleCount: number, company: { subscriptionStatus: SubscriptionStatus }): boolean {
     return company.subscriptionStatus === SubscriptionStatus.TRIAL && vehicleCount >= TRIAL_MAX_VEHICLES;
+  }
+
+  private exceedsPlanVehicleLimit(vehicleCount: number, company: { planKey: SubscriptionPlanKey }): boolean {
+    const plan = resolvePlanConfig(resolveCompanyPlanKey(company.planKey));
+    return plan.maxVehicles != null && vehicleCount >= plan.maxVehicles;
+  }
+
+  private exceedsPlanDriverLimit(driverCount: number, company: { planKey: SubscriptionPlanKey }): boolean {
+    const plan = resolvePlanConfig(resolveCompanyPlanKey(company.planKey));
+    return plan.maxDrivers != null && driverCount >= plan.maxDrivers;
   }
 
   async assertOperationalAccess(companyId: string): Promise<void> {
@@ -91,7 +135,35 @@ export class SubscriptionService {
     const count = await this.prisma.vehicle.count({ where: { companyId } });
     if (this.trialVehicleCapReached(count, company)) {
       throw new BadRequestException(
-        `No teste grátis você pode cadastrar até ${TRIAL_MAX_VEHICLES} veículos. Assine o plano (R$ ${PRICE_PER_VEHICLE_BRL.toFixed(2)}/veículo ao mês) para adicionar mais.`,
+        `No teste grátis você pode cadastrar até ${TRIAL_MAX_VEHICLES} veículos. Assine um plano para adicionar mais.`,
+      );
+    }
+    if (this.exceedsPlanVehicleLimit(count, company)) {
+      const plan = resolvePlanConfig(resolveCompanyPlanKey(company.planKey));
+      throw new BadRequestException(
+        `Seu plano ${plan.name} permite até ${plan.maxVehicles} veículos. Faça upgrade para continuar.`,
+      );
+    }
+  }
+
+  async assertCanAddDriver(companyId: string): Promise<void> {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+    });
+    if (!company) {
+      throw new BadRequestException('Empresa não encontrada');
+    }
+    if (!this.isOperational(company)) {
+      throw new HttpException(
+        'Assinatura inativa ou período de teste encerrado. Acesse Configurações e regularize o plano para continuar.',
+        HttpStatus.PAYMENT_REQUIRED,
+      );
+    }
+    const count = await this.prisma.driver.count({ where: { companyId } });
+    if (this.exceedsPlanDriverLimit(count, company)) {
+      const plan = resolvePlanConfig(resolveCompanyPlanKey(company.planKey));
+      throw new BadRequestException(
+        `Seu plano ${plan.name} permite até ${plan.maxDrivers} motoristas. Faça upgrade para continuar.`,
       );
     }
   }
@@ -104,24 +176,51 @@ export class SubscriptionService {
       throw new BadRequestException('Empresa não encontrada');
     }
     const vehicleCount = await this.prisma.vehicle.count({ where: { companyId } });
+    const driverCount = await this.prisma.driver.count({ where: { companyId } });
     const isOperational = this.isOperational(company);
-    const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID);
+    const currentPlanKey = resolveCompanyPlanKey(company.planKey);
+    const currentPlan = resolvePlanConfig(currentPlanKey);
+    const planCatalog = listPlanCatalogPublic();
+    const stripeConfigured = Boolean(
+      process.env.STRIPE_SECRET_KEY &&
+        planCatalog.some((plan) => plan.checkoutReady),
+    );
     return {
       status: company.subscriptionStatus,
+      currentPlanKey,
+      plans: planCatalog.map((plan) => ({
+        key: plan.key,
+        name: plan.name,
+        description: plan.description,
+        priceBrl: plan.priceBrl,
+        maxVehicles: plan.maxVehicles,
+        maxDrivers: plan.maxDrivers,
+        checkoutReady: plan.checkoutReady,
+        isCurrent: plan.key === currentPlanKey,
+      })),
+      limits: {
+        maxVehicles: currentPlan.maxVehicles,
+        maxDrivers: currentPlan.maxDrivers,
+      },
       isOperational,
       vehicleCount,
+      driverCount,
       maxVehiclesTrial: TRIAL_MAX_VEHICLES,
-      pricePerVehicleBrl: PRICE_PER_VEHICLE_BRL,
       trialEndsAt: company.trialEndsAt ? company.trialEndsAt.toISOString() : null,
       currentPeriodEnd: company.currentPeriodEnd ? company.currentPeriodEnd.toISOString() : null,
       stripeConfigured,
-      checkoutAvailable: Boolean(this.stripe && process.env.STRIPE_PRICE_ID),
+      checkoutAvailable: Boolean(this.stripe && planCatalog.some((plan) => plan.checkoutReady)),
       message: this.buildUserMessage(company, isOperational, vehicleCount),
     };
   }
 
   private buildUserMessage(
-    company: { subscriptionStatus: SubscriptionStatus; trialEndsAt: Date | null; currentPeriodEnd: Date | null },
+    company: {
+      subscriptionStatus: SubscriptionStatus;
+      trialEndsAt: Date | null;
+      currentPeriodEnd: Date | null;
+      planKey: SubscriptionPlanKey;
+    },
     isOperational: boolean,
     vehicleCount: number,
   ): string | null {
@@ -132,7 +231,12 @@ export class SubscriptionService {
       return `Teste grátis: até ${TRIAL_MAX_VEHICLES} veículos. Veículos atuais: ${vehicleCount}. O teste encerra em ${company.trialEndsAt.toLocaleDateString('pt-BR')}.`;
     }
     if (company.subscriptionStatus === SubscriptionStatus.ACTIVE) {
-      return 'Plano ativo. A cobrança segue a quantidade de veículos cadastrados (R$ 19,90/veículo/mês).';
+      const plan = resolvePlanConfig(resolveCompanyPlanKey(company.planKey));
+      const vehicleLimit =
+        plan.maxVehicles == null ? 'veículos ilimitados' : `até ${plan.maxVehicles} veículos`;
+      const driverLimit =
+        plan.maxDrivers == null ? 'motoristas ilimitados' : `até ${plan.maxDrivers} motoristas`;
+      return `Plano ${plan.name} ativo (${vehicleLimit}; ${driverLimit}).`;
     }
     return null;
   }
@@ -141,9 +245,15 @@ export class SubscriptionService {
     if (!this.stripe) {
       throw new BadRequestException('Pagamentos ainda não configurados no servidor (STRIPE_SECRET_KEY).');
     }
-    const price = process.env.STRIPE_PRICE_ID?.trim();
-    if (!price) {
-      throw new BadRequestException('STRIPE_PRICE_ID não definido. Crie o preço recorrente em BRL no Stripe.');
+    const hasAnyPrice = Boolean(
+      resolveStripePriceIdByPlan(SubscriptionPlanKey.BASIC) ||
+        resolveStripePriceIdByPlan(SubscriptionPlanKey.PRO) ||
+        resolveStripePriceIdByPlan(SubscriptionPlanKey.PREMIUM),
+    );
+    if (!hasAnyPrice) {
+      throw new BadRequestException(
+        'Nenhum preço Stripe configurado. Defina STRIPE_PRICE_ID_BASIC/PRO/PREMIUM.',
+      );
     }
   }
 
@@ -152,17 +262,24 @@ export class SubscriptionService {
     return this.stripe as Stripe;
   }
 
-  async createCheckoutSession(params: { companyId: string; userEmail: string; successPath?: string; cancelPath?: string }) {
+  async createCheckoutSession(params: {
+    companyId: string;
+    userEmail: string;
+    planKey?: SubscriptionPlanKey;
+    successPath?: string;
+    cancelPath?: string;
+  }) {
     this.assertStripeForCheckout();
-    const priceId = process.env.STRIPE_PRICE_ID!.trim();
     const company = await this.prisma.company.findUnique({
       where: { id: params.companyId },
       include: { owner: { select: { email: true } } },
     });
     if (!company) throw new BadRequestException('Empresa não encontrada');
 
-    const vehicleCount = await this.prisma.vehicle.count({ where: { companyId: params.companyId } });
-    const quantity = Math.max(1, vehicleCount);
+    const selectedPlanKey = params.planKey ?? resolveCompanyPlanKey(company.planKey);
+    const priceId = ensurePlanCheckoutReady(selectedPlanKey);
+
+    const quantity = 1;
 
     let customerId = company.stripeCustomerId;
     if (!customerId) {
@@ -189,9 +306,9 @@ export class SubscriptionService {
       cancel_url: cancel,
       allow_promotion_codes: true,
       client_reference_id: company.id,
-      metadata: { companyId: company.id },
+      metadata: { companyId: company.id, planKey: selectedPlanKey },
       subscription_data: {
-        metadata: { companyId: company.id },
+        metadata: { companyId: company.id, planKey: selectedPlanKey },
       },
     });
 
@@ -213,10 +330,12 @@ export class SubscriptionService {
   }
 
   /**
-   * Atualiza a quantidade de assentos no Stripe (preço por veículo) quando a frota muda.
+   * Compatibilidade legado: só sincroniza quantidade para assinaturas antigas por veículo.
    */
   async syncBillableSeatsAfterVehicleChange(companyId: string): Promise<void> {
     if (!this.stripe) return;
+    const legacyPerVehiclePrice = process.env.STRIPE_PRICE_ID?.trim();
+    if (!legacyPerVehiclePrice) return;
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company?.stripeSubscriptionId) return;
     if (company.subscriptionStatus !== SubscriptionStatus.ACTIVE) return;
@@ -225,7 +344,11 @@ export class SubscriptionService {
       const sub = await this.stripe.subscriptions.retrieve(company.stripeSubscriptionId, {
         expand: ['items.data.price'],
       });
-      const item = sub.items.data[0];
+      const item = sub.items.data.find((entry) => {
+        const priceRef = entry.price;
+        const priceId = typeof priceRef === 'string' ? priceRef : priceRef?.id;
+        return priceId === legacyPerVehiclePrice;
+      });
       if (!item?.id) return;
       const count = await this.prisma.vehicle.count({ where: { companyId } });
       const quantity = Math.max(1, count);
@@ -275,7 +398,9 @@ export class SubscriptionService {
             ? (subRef as { id: string }).id
             : null;
         if (subId) {
-          const sub = await this.stripe!.subscriptions.retrieve(subId);
+          const sub = await this.stripe!.subscriptions.retrieve(subId, {
+            expand: ['items.data.price'],
+          });
           await this.upsertCompanyFromSubscription(sub);
         }
         break;
@@ -288,7 +413,9 @@ export class SubscriptionService {
             ? (subRef as { id: string }).id
             : null;
         if (subId) {
-          const sub = await this.stripe!.subscriptions.retrieve(subId);
+          const sub = await this.stripe!.subscriptions.retrieve(subId, {
+            expand: ['items.data.price'],
+          });
           await this.upsertCompanyFromSubscription(sub, SubscriptionStatus.PAST_DUE);
         }
         break;
@@ -301,7 +428,9 @@ export class SubscriptionService {
   private async onCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
     if (session.mode !== 'subscription' || !session.subscription) return;
     const subId = typeof session.subscription === 'string' ? session.subscription : session.subscription.id;
-    const sub = await this.stripe!.subscriptions.retrieve(subId);
+    const sub = await this.stripe!.subscriptions.retrieve(subId, {
+      expand: ['items.data.price'],
+    });
     await this.upsertCompanyFromSubscription(sub);
   }
 
@@ -334,6 +463,25 @@ export class SubscriptionService {
     return c?.id ?? null;
   }
 
+  private resolvePlanKeyFromStripeSubscription(sub: Stripe.Subscription): SubscriptionPlanKey {
+    const metadataPlan = sub.metadata?.planKey as SubscriptionPlanKey | undefined;
+    if (
+      metadataPlan &&
+      Object.values(SubscriptionPlanKey).includes(metadataPlan)
+    ) {
+      return metadataPlan;
+    }
+
+    const item = sub.items.data.find((entry) => {
+      const priceRef = entry.price;
+      const priceId = typeof priceRef === 'string' ? priceRef : priceRef?.id;
+      return Boolean(planFromStripePriceId(priceId));
+    });
+    const priceRef = item?.price;
+    const priceId = typeof priceRef === 'string' ? priceRef : priceRef?.id;
+    return planFromStripePriceId(priceId) ?? SubscriptionPlanKey.PRO;
+  }
+
   private async upsertCompanyFromSubscription(
     sub: Stripe.Subscription,
     overrideStatus?: SubscriptionStatus,
@@ -345,6 +493,7 @@ export class SubscriptionService {
     }
     const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
     const end = new Date(sub.current_period_end * 1000);
+    const planKey = this.resolvePlanKeyFromStripeSubscription(sub);
 
     let nextStatus: SubscriptionStatus;
     if (overrideStatus !== undefined) {
@@ -365,6 +514,7 @@ export class SubscriptionService {
         subscriptionStatus: nextStatus,
         currentPeriodEnd: end,
         trialEndsAt: null,
+        planKey,
         stripeSubscriptionId: sub.id,
         ...(customerId ? { stripeCustomerId: customerId } : {}),
       },
