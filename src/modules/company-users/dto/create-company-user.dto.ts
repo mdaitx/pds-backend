@@ -11,8 +11,9 @@ import {
 import { Role } from '@prisma/client';
 
 /**
- * Convite de usuário com login (admin, co-proprietário e motorista).
- * Por segurança, o fluxo envia link único por e-mail (Supabase) para definir senha no primeiro acesso.
+ * Criação de usuário com login (admin, co-proprietário e motorista).
+ * Com `password`: conta criada no Supabase Auth com senha definida pelo dono.
+ * Sem `password`: convite por e-mail (inviteUserByEmail) para o usuário definir a senha.
  */
 export class CreateCompanyUserDto {
   @ApiProperty({ example: 'novo@empresa.com', maxLength: 255 })
@@ -28,7 +29,7 @@ export class CreateCompanyUserDto {
 
   @ApiPropertyOptional({
     description:
-      'Campo legado. Por segurança, o backend envia convite com link de primeiro acesso e não usa senha em texto.',
+      'Senha inicial (mín. 6 caracteres). Se omitida, envia convite por e-mail para definir senha no primeiro acesso.',
     minLength: 6,
     maxLength: 128,
   })

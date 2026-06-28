@@ -211,8 +211,8 @@ export class CompanyUsersService {
       throw new BadRequestException('Perfil inválido.');
     }
 
-    // Regra de segurança: novos usuários sempre recebem link único para definir senha no primeiro acesso.
-    const useInvite = true;
+    const password = dto.password?.trim() ?? '';
+    const useInvite = password.length === 0;
 
     const existing = await this.prisma.user.findUnique({
       where: { email },
@@ -223,21 +223,45 @@ export class CompanyUsersService {
 
     const admin = this.supabase.getClient().auth.admin;
 
-    const { data, error } = await admin.inviteUserByEmail(email, {
-      data: { display_name: dto.name?.trim() ?? undefined },
-      redirectTo: this.inviteRedirectTo(),
-    });
-    if (error) {
-      throw new BadRequestException(
-        error.message ??
-          'Não foi possível enviar o convite (verifique SERVICE_ROLE_KEY e FRONTEND_URL).',
-      );
+    let supabaseUserId: string;
+    let authEmail: string;
+
+    if (useInvite) {
+      const { data, error } = await admin.inviteUserByEmail(email, {
+        data: { display_name: dto.name?.trim() ?? undefined },
+        redirectTo: this.inviteRedirectTo(),
+      });
+      if (error) {
+        throw new BadRequestException(
+          error.message ??
+            'Não foi possível enviar o convite (verifique SERVICE_ROLE_KEY, FRONTEND_URL e SMTP).',
+        );
+      }
+      if (!data.user?.id) {
+        throw new BadRequestException('Resposta inválida ao convidar usuário no Supabase.');
+      }
+      supabaseUserId = data.user.id;
+      authEmail = (data.user.email ?? email).toLowerCase();
+    } else {
+      const { data, error } = await admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          display_name: dto.name?.trim() || undefined,
+        },
+      });
+      if (error) {
+        throw new BadRequestException(
+          error.message ?? 'Não foi possível criar o usuário no Supabase Auth.',
+        );
+      }
+      if (!data.user?.id) {
+        throw new BadRequestException('Resposta inválida ao criar usuário no Supabase.');
+      }
+      supabaseUserId = data.user.id;
+      authEmail = (data.user.email ?? email).toLowerCase();
     }
-    if (!data.user?.id) {
-      throw new BadRequestException('Resposta inválida ao convidar usuário no Supabase.');
-    }
-    const supabaseUserId = data.user.id;
-    const authEmail = (data.user.email ?? email).toLowerCase();
 
     try {
       const created = await this.prisma.user.create({
